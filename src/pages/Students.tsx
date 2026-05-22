@@ -5,7 +5,7 @@ import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
-import { Edit, Trash2, ShieldAlert, Search } from 'lucide-react';
+import { Edit, Trash2, ShieldAlert, Search, Printer } from 'lucide-react';
 import { formatCurrency, formatDateStr } from '../utils/formatters';
 import { z } from 'zod';
 import { differenceInYears } from 'date-fns';
@@ -225,7 +225,7 @@ export const Students: React.FC = () => {
       </div>
 
       {/* Barra de Filtros y Búsqueda */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 no-print">
         <div className="md:col-span-2">
           <Input
             placeholder="Buscar por Nombre, Matrícula o Cédula..."
@@ -244,14 +244,39 @@ export const Students: React.FC = () => {
             ]}
           />
         </div>
+        <div className="flex items-end">
+          <Button
+            variant="outline"
+            fullWidth
+            icon={<Printer className="w-4 h-4" />}
+            onClick={() => setTimeout(() => window.print(), 100)}
+          >
+            Imprimir Listado
+          </Button>
+        </div>
+      </div>
+
+      {/* Print header - only visible during print */}
+      <div className="hidden print-only text-center mb-6">
+        <h2 className="text-xl font-bold uppercase tracking-wide">Academia de Cursos</h2>
+        <p className="text-xs font-semibold">Listado General de Estudiantes</p>
+        <div className="border-b border-slate-400 my-4" />
+        <div className="grid grid-cols-2 text-left text-xs gap-1.5 font-bold mb-4">
+          <span>Curso: {selectedCourseFilter ? courses.find(c => c.id === selectedCourseFilter)?.nombre || 'Filtrado' : 'Todos los cursos'}</span>
+          <span>Total: {filteredStudents.length} estudiante(s)</span>
+          <span>Fecha Impresión: {new Date().toLocaleDateString()}</span>
+        </div>
+        <div className="border-b border-slate-400 mb-4" />
       </div>
 
       {/* Tabla de Alumnos */}
-      <Table
-        columns={columns}
-        data={filteredStudents}
-        keyExtractor={(row) => row.id}
-      />
+      <div className="print-area">
+        <Table
+          columns={columns}
+          data={filteredStudents}
+          keyExtractor={(row) => row.id}
+        />
+      </div>
 
       {/* Modal para Editar */}
       <Modal

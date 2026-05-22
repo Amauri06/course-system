@@ -184,50 +184,52 @@ export const CourseDetail: React.FC = () => {
             <div className="border-b border-slate-400 mb-4" />
           </div>
 
-          <Card
-            title={`Estudiantes Inscritos (${courseStudents.length})`}
-            subtitle="Roster oficial de alumnos cursando actualmente"
-            noPadding
-          >
-            {courseStudents.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 text-center text-slate-400 p-6">
-                <ClipboardList className="w-10 h-10 text-slate-300 mb-3" />
-                <span className="text-xs font-bold text-slate-400 mb-1">No hay alumnos inscritos</span>
-                <p className="text-[10px] max-w-xs text-slate-400">
-                  Registra un estudiante en el módulo de inscripción y asócialo a este curso.
-                </p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm text-slate-600">
-                  <thead className="bg-slate-50 print:bg-transparent border-b border-slate-100 print:border-slate-400 font-bold uppercase text-[10px] tracking-wider text-slate-400 print:text-black">
-                    <tr>
-                      <th className="px-6 py-4.5">Matrícula</th>
-                      <th className="px-6 py-4.5">Nombre Completo</th>
-                      <th className="px-6 py-4.5">Teléfono</th>
-                      <th className="px-6 py-4.5">Inscripción</th>
-                      <th className="px-6 py-4.5 text-right">Balance</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 print:divide-slate-300">
-                    {courseStudents.map((student) => (
-                      <tr key={student.id} className="text-slate-700 font-medium hover:bg-slate-50/50 print:hover:bg-transparent transition-colors">
-                        <td className="px-6 py-4 font-mono text-xs text-slate-400 print:text-black">{student.matricula}</td>
-                        <td className="px-6 py-4 font-bold text-slate-800 print:text-black">{student.nombreCompleto}</td>
-                        <td className="px-6 py-4 text-xs text-slate-500 print:text-black">{student.telefono}</td>
-                        <td className="px-6 py-4 text-xs text-slate-400 print:text-black">
-                          {formatDateStr(student.fechaInscripcion)}
-                        </td>
-                        <td className="px-6 py-4 text-right font-extrabold text-slate-800 print:text-black">
-                          {formatCurrency(student.balancePendiente)}
-                        </td>
+          <div className="print-area">
+            <Card
+              title={`Estudiantes Inscritos (${courseStudents.length})`}
+              subtitle="Roster oficial de alumnos cursando actualmente"
+              noPadding
+            >
+              {courseStudents.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center text-slate-400 p-6">
+                  <ClipboardList className="w-10 h-10 text-slate-300 mb-3" />
+                  <span className="text-xs font-bold text-slate-400 mb-1">No hay alumnos inscritos</span>
+                  <p className="text-[10px] max-w-xs text-slate-400">
+                    Registra un estudiante en el módulo de inscripción y asócialo a este curso.
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm text-slate-600">
+                    <thead className="bg-slate-50 print:bg-transparent border-b border-slate-100 print:border-slate-400 font-bold uppercase text-[10px] tracking-wider text-slate-400 print:text-black">
+                      <tr>
+                        <th className="px-6 py-4.5">Matrícula</th>
+                        <th className="px-6 py-4.5">Nombre Completo</th>
+                        <th className="px-6 py-4.5">Teléfono</th>
+                        <th className="px-6 py-4.5">Inscripción</th>
+                        <th className="px-6 py-4.5 text-right">Balance</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </Card>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 print:divide-slate-300">
+                      {courseStudents.map((student) => (
+                        <tr key={student.id} className="text-slate-700 font-medium hover:bg-slate-50/50 print:hover:bg-transparent transition-colors">
+                          <td className="px-6 py-4 font-mono text-xs text-slate-400 print:text-black">{student.matricula}</td>
+                          <td className="px-6 py-4 font-bold text-slate-800 print:text-black">{student.nombreCompleto}</td>
+                          <td className="px-6 py-4 text-xs text-slate-500 print:text-black">{student.telefono}</td>
+                          <td className="px-6 py-4 text-xs text-slate-400 print:text-black">
+                            {formatDateStr(student.fechaInscripcion)}
+                          </td>
+                          <td className="px-6 py-4 text-right font-extrabold text-slate-800 print:text-black">
+                            {formatCurrency(student.balancePendiente)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card>
+          </div>
         </div>
       </div>
     </div>

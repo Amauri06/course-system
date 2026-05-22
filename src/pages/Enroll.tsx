@@ -129,6 +129,7 @@ export const Enroll: React.FC = () => {
 
   const [enrolledStudent, setEnrolledStudent] = useState<Student | null>(null);
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [printMode, setPrintMode] = useState<'ticket' | 'fullpage'>('fullpage');
   const [error, setError] = useState('');
 
   const selectedCourseCost = cursoId
@@ -435,32 +436,34 @@ export const Enroll: React.FC = () => {
           >
             <div className="flex flex-col gap-6 w-full" id="invoice-printable-container">
               <div id="invoice-printable">
-                <div className="ticket-print relative overflow-hidden bg-white p-7 rounded-[2rem] border border-slate-100 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.1)] flex flex-col font-sans">
-                  <div className="absolute -top-12 -right-12 w-32 h-32 bg-brand-50 rounded-full opacity-60" data-html2canvas-ignore="true"></div>
+                <div className={printMode === 'ticket' ? 'ticket-print relative overflow-hidden bg-white p-7 rounded-[2rem] border border-slate-100 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.1)] flex flex-col font-sans' : 'fullpage-print'}>
+                  {printMode === 'ticket' && (
+                    <div className="absolute -top-12 -right-12 w-32 h-32 bg-brand-50 rounded-full opacity-60" data-html2canvas-ignore="true"></div>
+                  )}
 
-                  <div className="relative flex flex-col items-center justify-center text-center gap-2 pb-6 border-b border-slate-100">
-                    <div className="p-3.5 rounded-2xl bg-gradient-to-br from-brand-50 to-brand-100 text-brand-600 shadow-inner">
-                      <GraduationCap className="w-7 h-7" />
+                  <div className={printMode === 'ticket' ? 'flex flex-col items-center justify-center text-center gap-2 pb-6 border-b border-slate-100' : 'flex flex-col items-center justify-center text-center gap-2 pb-6 border-b border-slate-200'}>
+                    <div className={printMode === 'ticket' ? 'p-3.5 rounded-2xl bg-gradient-to-br from-brand-50 to-brand-100 text-brand-600 shadow-inner' : 'p-3 rounded-xl bg-emerald-50 text-emerald-600'}>
+                      <GraduationCap className={printMode === 'ticket' ? 'w-7 h-7' : 'w-8 h-8'} />
                     </div>
-                    <span className="font-black text-xl text-slate-800 tracking-tight mt-2">ACADEMIA DE CURSOS</span>
-                    <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest leading-none">Comprobante de Inscripción</span>
+                    <span className={printMode === 'ticket' ? 'font-black text-xl text-slate-800 tracking-tight mt-2' : 'font-black text-2xl text-slate-800 tracking-tight mt-3'}>Colegio de Estrellas La Excelencia</span>
+                    <span className={printMode === 'ticket' ? 'text-[10px] font-extrabold text-slate-400 uppercase tracking-widest leading-none' : 'text-xs font-bold text-slate-500 uppercase tracking-widest'}>Comprobante de Inscripción</span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-y-4 py-5 border-b border-slate-100 text-xs font-semibold text-slate-600">
+                  <div className={printMode === 'ticket' ? 'grid grid-cols-2 gap-y-4 py-5 border-b border-slate-100 text-xs font-semibold text-slate-600' : 'grid grid-cols-2 gap-y-5 py-6 border-b border-slate-200 text-sm font-semibold text-slate-600'}>
                     <div className="flex flex-col">
-                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Matrícula</span>
+                      <span className={printMode === 'ticket' ? 'text-[10px] font-black text-slate-400 uppercase tracking-wider' : 'text-xs font-bold text-slate-400 uppercase tracking-wider'}>Matrícula</span>
                       <span className="text-brand-700 font-mono font-bold mt-1 bg-brand-50 self-start px-2 py-0.5 rounded-md border border-brand-100">{enrolledStudent.matricula}</span>
                     </div>
                     <div className="flex flex-col items-end">
-                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Fecha</span>
+                      <span className={printMode === 'ticket' ? 'text-[10px] font-black text-slate-400 uppercase tracking-wider' : 'text-xs font-bold text-slate-400 uppercase tracking-wider'}>Fecha</span>
                       <span className="text-slate-800 mt-1 font-bold">{new Date(enrolledStudent.fechaInscripcion).toLocaleDateString()}</span>
                     </div>
                   </div>
 
-                  <div className="flex flex-col gap-3 py-5 border-b border-slate-100 text-xs text-slate-600 font-semibold">
+                  <div className={printMode === 'ticket' ? 'flex flex-col gap-3 py-5 border-b border-slate-100 text-xs text-slate-600 font-semibold' : 'flex flex-col gap-4 py-6 border-b border-slate-200 text-sm text-slate-600 font-semibold'}>
                     <div className="flex justify-between items-center p-2.5 rounded-xl bg-slate-50 border border-slate-100">
                       <div className="flex flex-col">
-                        <span className="text-[10px] text-slate-400 font-black uppercase">Estudiante</span>
+                        <span className={printMode === 'ticket' ? 'text-[10px] text-slate-400 font-black uppercase' : 'text-xs text-slate-500 font-bold uppercase'}>Estudiante</span>
                         <span className="text-slate-800 font-black text-sm mt-0.5">{enrolledStudent.nombreCompleto}</span>
                       </div>
                       <User className="w-5 h-5 text-slate-300" />
@@ -476,23 +479,47 @@ export const Enroll: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="flex flex-col py-5 text-xs text-slate-600 font-semibold gap-3">
+                  <div className={printMode === 'ticket' ? 'flex flex-col py-5 text-xs text-slate-600 font-semibold gap-3' : 'flex flex-col py-6 text-sm text-slate-600 font-semibold gap-4'}>
                     <div className="flex justify-between items-center p-3 bg-gradient-to-r from-slate-800 to-slate-900 text-white rounded-xl shadow-md">
                       <span className="uppercase text-[10px] font-black tracking-widest text-slate-300">Deuda Total del Curso</span>
-                      <span className="text-lg font-black text-white">{formatCurrency(enrolledStudent.balancePendiente)}</span>
+                      <span className={printMode === 'ticket' ? 'text-lg font-black text-white' : 'text-xl font-black text-white'}>{formatCurrency(enrolledStudent.balancePendiente)}</span>
                     </div>
                   </div>
 
-                  <div className="flex flex-col items-center justify-center text-center mt-2 text-[9px] font-black text-slate-400 uppercase tracking-widest leading-relaxed">
-                    <span>RNC 1-01-20304-2 • www.academiadecursos.edu.do</span>
+                  <div className={printMode === 'ticket' ? 'flex flex-col items-center justify-center text-center mt-2 text-[9px] font-black text-slate-400 uppercase tracking-widest leading-relaxed' : 'flex flex-col items-center justify-center text-center mt-6 pt-6 border-t border-slate-200 text-xs font-bold text-slate-400 uppercase tracking-widest leading-relaxed'}>
+                    <span>RNC 1-01-20304-2 • www.colegioestrellasexcelencia.edu.do</span>
                     <span className="mt-1">¡Bienvenido!</span>
                   </div>
                 </div>
               </div>
 
+              <div className="flex items-center justify-center gap-2 no-print pb-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-1">Modo:</span>
+                <button
+                  onClick={() => setPrintMode('ticket')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 cursor-pointer ${
+                    printMode === 'ticket'
+                      ? 'bg-slate-800 text-white shadow-sm'
+                      : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                  }`}
+                >
+                  Ticket 80mm
+                </button>
+                <button
+                  onClick={() => setPrintMode('fullpage')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 cursor-pointer ${
+                    printMode === 'fullpage'
+                      ? 'bg-slate-800 text-white shadow-sm'
+                      : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                  }`}
+                >
+                  Hoja Completa
+                </button>
+              </div>
+
               <div className="flex items-center gap-3 pt-3 border-t border-slate-100 no-print">
                 <Button variant="outline" className="flex-1" icon={<Printer className="w-4 h-4" />} onClick={handlePrint}>
-                  Imprimir Comprobante
+                  {printMode === 'ticket' ? 'Imprimir Ticket' : 'Imprimir Hoja Completa'}
                 </Button>
                 <Button variant="secondary" className="flex-1" onClick={() => setIsConfirmModalOpen(false)}>
                   Cerrar
@@ -500,7 +527,7 @@ export const Enroll: React.FC = () => {
               </div>
               <div className="no-print pt-2 flex justify-center">
                 <p className="text-xs font-semibold text-slate-400 text-center">
-                  Para realizar pagos, vaya a la sección <strong>Registrar Abono</strong> en el menú lateral.
+                  Para realizar pagos, vaya a la sección <strong>Cobros</strong> en el menú lateral.
                 </p>
               </div>
             </div>

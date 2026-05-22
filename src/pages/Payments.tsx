@@ -630,7 +630,7 @@ export const Payments: React.FC = () => {
                   <div className={printMode === 'ticket' ? 'p-3.5 rounded-2xl bg-gradient-to-br from-brand-50 to-brand-100 text-brand-600 shadow-inner' : 'p-3 rounded-xl bg-emerald-50 text-emerald-600'}>
                     <Wallet className={printMode === 'ticket' ? 'w-7 h-7' : 'w-8 h-8'} />
                   </div>
-                  <span className={printMode === 'ticket' ? 'font-black text-xl text-slate-800 tracking-tight mt-2' : 'font-black text-2xl text-slate-800 tracking-tight mt-3'}>ACADEMIA DE CURSOS</span>
+                  <span className={printMode === 'ticket' ? 'font-black text-xl text-slate-800 tracking-tight mt-2' : 'font-black text-2xl text-slate-800 tracking-tight mt-3'}>Colegio de Estrellas La Excelencia</span>
                   <span className={printMode === 'ticket' ? 'text-[10px] font-extrabold text-slate-400 uppercase tracking-widest leading-none' : 'text-xs font-bold text-slate-500 uppercase tracking-widest'}>Recibo de Pago</span>
                 </div>
 
@@ -722,7 +722,7 @@ export const Payments: React.FC = () => {
                 </div>
 
                 <div className={printMode === 'ticket' ? 'flex flex-col items-center justify-center text-center mt-2 text-[9px] font-black text-slate-400 uppercase tracking-widest leading-relaxed' : 'flex flex-col items-center justify-center text-center mt-6 pt-6 border-t border-slate-200 text-xs font-bold text-slate-400 uppercase tracking-widest leading-relaxed'}>
-                  <span>RNC 1-01-20304-2 • www.academiadecursos.edu.do</span>
+                  <span>RNC 1-01-20304-2 • www.colegioestrellasexcelencia.edu.do</span>
                   <span className="mt-1">¡Gracias por tu pago!</span>
                 </div>
               </div>
