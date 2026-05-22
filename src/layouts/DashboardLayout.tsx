@@ -7,7 +7,6 @@ import {
   GraduationCap,
   CreditCard,
   PiggyBank,
-  Database,
   Calendar,
   AlertCircle,
   Menu,
@@ -21,7 +20,7 @@ import { es } from 'date-fns/locale';
 export const DashboardLayout: React.FC = () => {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { closures, activeAdapter, changePersistenceAdapter } = useAcademyStore();
+  const { closures} = useAcademyStore();
 
   const todayDateStr = format(new Date(), 'yyyy-MM-dd');
   const todayClosure = closures.find((c) => c.fecha === todayDateStr);
@@ -36,9 +35,9 @@ export const DashboardLayout: React.FC = () => {
     { path: '/cash-register', label: 'Cierre de Caja', icon: <PiggyBank className="w-5 h-5" /> },
   ];
 
-  const handleAdapterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    changePersistenceAdapter(e.target.value as 'localStorage' | 'supabase');
-  };
+  // const handleAdapterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+  //   changePersistenceAdapter(e.target.value as 'localStorage' | 'supabase');
+  // };
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden font-sans">
@@ -79,7 +78,7 @@ export const DashboardLayout: React.FC = () => {
         </nav>
 
         {/* Database Switcher in Sidebar Footer */}
-        <div className="p-4 border-t border-slate-800 bg-slate-950/40">
+        {/* <div className="p-4 border-t border-slate-800 bg-slate-950/40">
           <div className="flex flex-col gap-2 p-3 bg-slate-900 rounded-xl border border-slate-800">
             <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
               <Database className="w-4 h-4 text-brand-500" />
@@ -94,7 +93,7 @@ export const DashboardLayout: React.FC = () => {
               <option value="supabase">Supabase DB (Demo/Mock)</option>
             </select>
           </div>
-        </div>
+        </div> */}
       </aside>
 
       {/* ========================================================================= */}
@@ -113,7 +112,7 @@ export const DashboardLayout: React.FC = () => {
         </button>
       </div>
 
-      {mobileMenuOpen && (
+      {/* {mobileMenuOpen && (
         <div className="lg:hidden fixed inset-0 z-30 bg-slate-900/40 backdrop-blur-xs no-print" onClick={() => setMobileMenuOpen(false)}>
           <div
             className="absolute top-16 left-0 right-0 bg-slate-900 text-slate-300 p-6 flex flex-col gap-4 shadow-xl border-t border-slate-800"
@@ -148,7 +147,7 @@ export const DashboardLayout: React.FC = () => {
             </div>
           </div>
         </div>
-      )}
+      )} */}
 
       {/* ========================================================================= */}
       {/* MAIN CONTENT AREA */}

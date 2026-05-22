@@ -18,7 +18,7 @@ import { formatCurrency, formatDateStr } from '../utils/formatters';
 import { format } from 'date-fns';
 
 export const CashRegister: React.FC = () => {
-  const { closures, closeActiveClosure, checkOrCreateDailyClosure } = useAcademyStore();
+  const { closures, closeActiveClosure, reopenClosure, checkOrCreateDailyClosure } = useAcademyStore();
   const [activeTab, setActiveTab] = useState<'today' | 'history'>('today');
   const [selectedHistoryDate, setSelectedHistoryDate] = useState('');
   const [viewingClosureDetail, setViewingClosureDetail] = useState<any>(null);
@@ -207,12 +207,17 @@ export const CashRegister: React.FC = () => {
         <div className="flex flex-col gap-8 no-print animate-fade-in">
           {/* Alertas de Caja Abierta / Cerrada */}
           {todayClosure.cerrado ? (
-            <div className="flex items-center gap-3 p-4 bg-slate-100 border border-slate-200 rounded-2xl text-slate-600">
-              <Lock className="w-5.5 h-5.5 text-slate-400 shrink-0" />
-              <div className="flex flex-col gap-0.5">
-                <span className="text-sm font-bold">Esta caja ya se encuentra cerrada.</span>
-                <span className="text-xs font-semibold text-slate-400">No se pueden matricular más alumnos por el día de hoy.</span>
+            <div className="flex items-center justify-between flex-wrap gap-4 bg-slate-100 border border-slate-200 rounded-2xl p-4 text-slate-600">
+              <div className="flex items-center gap-3">
+                <Lock className="w-5.5 h-5.5 text-slate-400 shrink-0" />
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-sm font-bold">Caja Cerrada</span>
+                  <span className="text-xs font-semibold text-slate-400">No se pueden registrar cobros hasta reabrirla.</span>
+                </div>
               </div>
+              <Button variant="outline" size="sm" icon={<Lock className="w-4 h-4" />} onClick={() => reopenClosure()}>
+                Reabrir Caja
+              </Button>
             </div>
           ) : (
             <div className="flex items-center justify-between flex-wrap gap-4 bg-emerald-50 border border-emerald-100/70 p-4.5 rounded-2xl text-emerald-800">

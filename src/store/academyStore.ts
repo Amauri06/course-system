@@ -50,6 +50,7 @@ interface AcademyState {
   // Cierre de Caja Actions
   checkOrCreateDailyClosure: () => void;
   closeActiveClosure: () => void;
+  reopenClosure: () => void;
   
   // Configuración del Adaptador
   changePersistenceAdapter: (type: 'localStorage' | 'supabase') => void;
@@ -218,6 +219,14 @@ export const useAcademyStore = create<AcademyState>()(
           throw new Error('Estudiante no encontrado');
         }
 
+        // Validar que la caja de hoy esté abierta
+        const todayClosure = state.closures.find((c) => c.fecha === getTodayDateStr());
+        if (todayClosure && todayClosure.cerrado) {
+          throw new Error(
+            'La caja del día de hoy ya está cerrada. Debe reabrirla desde Cierre de Caja antes de registrar nuevos cobros.'
+          );
+        }
+
         const course = state.courses.find((c) => c.id === student.cursoId);
         const nuevoBalance = Math.max(0, student.balancePendiente - montoPagado);
 
@@ -313,6 +322,22 @@ export const useAcademyStore = create<AcademyState>()(
                 ...closure,
                 cerrado: true,
                 fechaCierre: new Date().toISOString()
+              };
+            }
+            return closure;
+          })
+        }));
+      },
+
+      reopenClosure: () => {
+        const todayDate = getTodayDateStr();
+        set((state) => ({
+          closures: state.closures.map((closure) => {
+            if (closure.fecha === todayDate && closure.cerrado) {
+              return {
+                ...closure,
+                cerrado: false,
+                fechaCierre: undefined
               };
             }
             return closure;
