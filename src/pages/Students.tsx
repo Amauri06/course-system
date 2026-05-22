@@ -7,6 +7,45 @@ import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { Edit, Trash2, ShieldAlert, Search } from 'lucide-react';
 import { formatCurrency, formatDateStr } from '../utils/formatters';
+import { z } from 'zod';
+import { differenceInYears } from 'date-fns';
+
+export const getStudentUpdateSchema = (courses: any[]) => {
+  return z.object({
+    nombreCompleto: z.string().min(1, 'El nombre completo es obligatorio.'),
+    telefono: z.string().min(1, 'El teléfono es obligatorio.'),
+    fechaNacimiento: z.string().min(1, 'La fecha de nacimiento es obligatoria.'),
+    direccion: z.string().optional(),
+    cedula: z.string().optional(),
+    cursoId: z.string().min(1, 'El curso es obligatorio.'),
+    horario: z.string().min(1, 'El horario es obligatorio.'),
+    balancePendiente: z.number().min(0, 'El balance no puede ser negativo.')
+  }).superRefine((data, ctx) => {
+    const birthDate = new Date(data.fechaNacimiento);
+    if (isNaN(birthDate.getTime())) {
+      ctx.addIssue({ path: ['fechaNacimiento'], code: z.ZodIssueCode.custom, message: 'La fecha de nacimiento no es válida.' });
+      return;
+    }
+
+    const age = differenceInYears(new Date(), birthDate);
+    const selectedCourse = courses.find(c => c.id === data.cursoId);
+    
+    if (selectedCourse) {
+      const isIngles = selectedCourse.nombre.toLowerCase().includes('ingl');
+      const minAge = isIngles ? 10 : 13;
+      if (age < minAge) {
+        ctx.addIssue({ path: ['fechaNacimiento'], code: z.ZodIssueCode.custom, message: `El estudiante debe tener al menos ${minAge} años para el curso de ${selectedCourse.nombre} (edad actual: ${age} años).` });
+      }
+    }
+
+    if (age >= 18) {
+      if (!data.cedula || data.cedula.trim().length === 0) {
+        ctx.addIssue({ path: ['cedula'], code: z.ZodIssueCode.custom, message: 'La cédula es obligatoria para estudiantes mayores de edad (18 años o más).' });
+      }
+    }
+  });
+};
+
 
 export const Students: React.FC = () => {
   const { students, courses, updateStudent, deleteStudent } = useAcademyStore();
@@ -20,9 +59,11 @@ export const Students: React.FC = () => {
   // Form states
   const [nombreCompleto, setNombreCompleto] = useState('');
   const [telefono, setTelefono] = useState('');
+  const [fechaNacimiento, setFechaNacimiento] = useState('');
   const [cedula, setCedula] = useState('');
   const [direccion, setDireccion] = useState('');
   const [cursoId, setCursoId] = useState('');
+  const [horario, setHorario] = useState('');
   const [balancePendiente, setBalancePendiente] = useState(0);
   const [error, setError] = useState('');
 
@@ -30,7 +71,7 @@ export const Students: React.FC = () => {
   const filteredStudents = students.filter((student) => {
     const matchesSearch =
       student.nombreCompleto.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      student.cedula.includes(searchTerm) ||
+      (student.cedula || '').includes(searchTerm) ||
       student.matricula.toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchesCourse = selectedCourseFilter === '' || student.cursoId === selectedCourseFilter;
@@ -42,9 +83,11 @@ export const Students: React.FC = () => {
     setEditingStudent(student);
     setNombreCompleto(student.nombreCompleto);
     setTelefono(student.telefono);
-    setCedula(student.cedula);
-    setDireccion(student.direccion);
+    setCedula(student.cedula || '');
+    setDireccion(student.direccion || '');
+    setFechaNacimiento(student.fechaNacimiento || '');
     setCursoId(student.cursoId);
+    setHorario(student.horario || '');
     setBalancePendiente(student.balancePendiente);
     setError('');
     setIsModalOpen(true);
@@ -52,8 +95,20 @@ export const Students: React.FC = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!nombreCompleto.trim() || !telefono.trim() || !cedula.trim() || !direccion.trim()) {
-      setError('Por favor, rellene todos los campos requeridos.');
+    
+    const validationResult = getStudentUpdateSchema(courses).safeParse({
+      nombreCompleto,
+      telefono,
+      fechaNacimiento,
+      direccion,
+      cedula,
+      cursoId,
+      horario,
+      balancePendiente: Number(balancePendiente)
+    });
+
+    if (!validationResult.success) {
+      setError(validationResult.error.issues[0].message);
       return;
     }
 
@@ -62,9 +117,11 @@ export const Students: React.FC = () => {
         ...editingStudent,
         nombreCompleto,
         telefono,
+        fechaNacimiento,
         cedula,
         direccion,
         cursoId,
+        horario,
         balancePendiente: Number(balancePendiente)
       });
     }
@@ -105,6 +162,11 @@ export const Students: React.FC = () => {
       key: 'telefono',
       header: 'Contacto',
       render: (row: any) => <span className="text-xs text-slate-500 font-bold">{row.telefono}</span>
+    },
+    {
+      key: 'horario',
+      header: 'Horario',
+      render: (row: any) => <span className="text-[10px] font-black tracking-wide text-brand-600 bg-brand-50 px-2 py-1 rounded-md">{row.horario || 'N/A'}</span>
     },
     {
       key: 'fechaInscripcion',
@@ -217,32 +279,45 @@ export const Students: React.FC = () => {
             value={nombreCompleto}
             onChange={(e) => setNombreCompleto(e.target.value)}
             placeholder="Ej: Ana Gómez Pérez"
-            required
           />
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <Input
-              label="Cédula *"
-              value={cedula}
-              onChange={(e) => setCedula(e.target.value)}
-              placeholder="001-1234567-8"
-              required
+              label="Fecha Nac. *"
+              type="date"
+              value={fechaNacimiento}
+              onChange={(e) => setFechaNacimiento(e.target.value)}
             />
             <Input
-              label="Teléfono de Contacto *"
+              label="Teléfono *"
               value={telefono}
               onChange={(e) => setTelefono(e.target.value)}
               placeholder="809-555-0101"
-              required
+            />
+            <Input
+              label="Cédula"
+              value={cedula}
+              onChange={(e) => setCedula(e.target.value)}
+              placeholder="Opcional < 18 años"
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <Select
-              label="Programa Inscrito *"
+              label="Programa *"
               value={cursoId}
               onChange={(e) => setCursoId(e.target.value)}
               options={courses.map((c) => ({ value: c.id, label: c.nombre }))}
+            />
+            <Select
+              label="Horario *"
+              value={horario}
+              onChange={(e) => setHorario(e.target.value)}
+              options={[
+                { value: '', label: 'Seleccionar...' },
+                { value: '9:00 am - 12:00 pm', label: 'Mañana (9:00am-12:00pm)' },
+                { value: '2:00 pm - 5:00 pm', label: 'Tarde (2:00pm-5:00pm)' }
+              ]}
             />
             <Input
               label="Balance Pendiente ($) *"
@@ -256,14 +331,13 @@ export const Students: React.FC = () => {
 
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              Dirección de Residencia *
+              Dirección de Residencia
             </label>
             <textarea
               value={direccion}
               onChange={(e) => setDireccion(e.target.value)}
-              placeholder="Dirección física completa..."
+              placeholder="Dirección física completa (Opcional)..."
               className="w-full px-4 py-3 bg-white border border-slate-200 focus:ring-brand-100 focus:border-brand-500 rounded-xl text-slate-800 text-sm placeholder-slate-400 transition-all duration-200 focus:outline-hidden focus:ring-4 h-20"
-              required
             />
           </div>
 

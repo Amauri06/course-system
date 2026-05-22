@@ -38,14 +38,14 @@ export const Modal: React.FC<ModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs transition-opacity animate-fade-in no-print">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs transition-opacity animate-fade-in print:bg-transparent print:backdrop-blur-none">
       {/* Backdrop */}
-      <div className="absolute inset-0 cursor-default" onClick={onClose} />
+      <div className="absolute inset-0 cursor-default no-print" onClick={onClose} />
 
       {/* Modal Container */}
-      <div className={`relative w-full ${sizes[size]} bg-white rounded-2xl shadow-xl border border-slate-100 flex flex-col max-h-[90vh] overflow-hidden transform scale-100 animate-slide-up`}>
+      <div className={`relative w-full ${sizes[size]} bg-white rounded-2xl shadow-xl border border-slate-100 flex flex-col max-h-[90vh] overflow-hidden print:overflow-visible print:max-h-none print:static transform scale-100 animate-slide-up`}>
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50 no-print">
           <h3 className="text-lg font-bold text-slate-800 tracking-tight">
             {title}
           </h3>
@@ -58,7 +58,7 @@ export const Modal: React.FC<ModalProps> = ({
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-6 print:overflow-visible print:p-0">
           {children}
         </div>
       </div>

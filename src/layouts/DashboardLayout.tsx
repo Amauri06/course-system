@@ -11,7 +11,8 @@ import {
   Calendar,
   AlertCircle,
   Menu,
-  X
+  X,
+  Wallet
 } from 'lucide-react';
 import { useAcademyStore } from '../store/academyStore';
 import { format } from 'date-fns';
@@ -31,6 +32,7 @@ export const DashboardLayout: React.FC = () => {
     { path: '/courses', label: 'Gestión Cursos', icon: <BookOpen className="w-5 h-5" /> },
     { path: '/teachers', label: 'Gestión Profesores', icon: <Users className="w-5 h-5" /> },
     { path: '/students', label: 'Gestión Estudiantes', icon: <GraduationCap className="w-5 h-5" /> },
+    { path: '/payments', label: 'Cobros', icon: <Wallet className="w-5 h-5" /> },
     { path: '/cash-register', label: 'Cierre de Caja', icon: <PiggyBank className="w-5 h-5" /> },
   ];
 

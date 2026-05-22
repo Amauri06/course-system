@@ -4,7 +4,6 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
-import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
 import {
   CreditCard,
@@ -12,68 +11,138 @@ import {
   GraduationCap,
   ShieldCheck,
   Printer,
-  FileDown,
-  Coins
+  Search
 } from 'lucide-react';
 import { formatCurrency } from '../utils/formatters';
+import { z } from 'zod';
+import { differenceInYears } from 'date-fns';
+import type { Course, Student } from '../types';
+
+const getEnrollSchema = (courses: Course[]) => {
+  return z.object({
+    isNewStudent: z.boolean(),
+    nombreCompleto: z.string().optional(),
+    telefono: z.string().optional(),
+    fechaNacimiento: z.string().optional(),
+    direccion: z.string().optional(),
+    cedula: z.string().optional(),
+    existingStudentId: z.string().optional(),
+    cursoId: z.string().min(1, 'El curso es obligatorio.'),
+    horario: z.string().min(1, 'El horario es obligatorio.'),
+  }).superRefine((data, ctx) => {
+    if (!data.isNewStudent) {
+      if (!data.existingStudentId) {
+        ctx.addIssue({
+          path: ['existingStudentId'],
+          code: z.ZodIssueCode.custom,
+          message: 'Debe seleccionar un estudiante registrado.'
+        });
+      }
+      return;
+    }
+
+    if (!data.nombreCompleto || data.nombreCompleto.trim().length === 0) {
+      ctx.addIssue({
+        path: ['nombreCompleto'],
+        code: z.ZodIssueCode.custom,
+        message: 'El nombre completo es obligatorio.'
+      });
+    }
+
+    if (!data.telefono || data.telefono.trim().length === 0) {
+      ctx.addIssue({
+        path: ['telefono'],
+        code: z.ZodIssueCode.custom,
+        message: 'El teléfono es obligatorio.'
+      });
+    }
+
+    if (!data.fechaNacimiento || data.fechaNacimiento.trim().length === 0) {
+      ctx.addIssue({
+        path: ['fechaNacimiento'],
+        code: z.ZodIssueCode.custom,
+        message: 'La fecha de nacimiento es obligatoria.'
+      });
+      return;
+    }
+
+    const birthDate = new Date(data.fechaNacimiento);
+    if (isNaN(birthDate.getTime())) {
+      ctx.addIssue({
+        path: ['fechaNacimiento'],
+        code: z.ZodIssueCode.custom,
+        message: 'La fecha de nacimiento no es válida.'
+      });
+      return;
+    }
+
+    const age = differenceInYears(new Date(), birthDate);
+    const selectedCourse = courses.find(c => c.id === data.cursoId);
+
+    if (selectedCourse) {
+      const isIngles = selectedCourse.nombre.toLowerCase().includes('ingl');
+      const minAge = isIngles ? 10 : 13;
+      if (age < minAge) {
+        ctx.addIssue({
+          path: ['fechaNacimiento'],
+          code: z.ZodIssueCode.custom,
+          message: `El estudiante debe tener al menos ${minAge} años para inscribirse en el curso de ${selectedCourse.nombre} (edad actual: ${age} años).`
+        });
+      }
+    }
+
+    if (age >= 18) {
+      if (!data.cedula || data.cedula.trim().length === 0) {
+        ctx.addIssue({
+          path: ['cedula'],
+          code: z.ZodIssueCode.custom,
+          message: 'La cédula es obligatoria para estudiantes mayores de edad (18 años o más).'
+        });
+      }
+    }
+  });
+};
 
 export const Enroll: React.FC = () => {
   const { courses, students, enrollStudent } = useAcademyStore();
 
-  // Mode: nuevo estudiante o existente
   const [isNewStudent, setIsNewStudent] = useState(true);
   const [existingStudentId, setExistingStudentId] = useState('');
+  const [studentSearchTerm, setStudentSearchTerm] = useState('');
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
-  // New Student Details
+  const [horario, setHorario] = useState('');
+
+  const filteredExistingStudents = students.filter(s => {
+    if (!studentSearchTerm) return true;
+    const term = studentSearchTerm.toLowerCase();
+    return s.nombreCompleto.toLowerCase().includes(term) || (s.cedula && s.cedula.includes(term));
+  });
+
   const [nombreCompleto, setNombreCompleto] = useState('');
   const [telefono, setTelefono] = useState('');
+  const [fechaNacimiento, setFechaNacimiento] = useState('');
   const [cedula, setCedula] = useState('');
   const [direccion, setDireccion] = useState('');
 
-  // Course & Payment Details
   const [cursoId, setCursoId] = useState('');
-  const [metodoPago, setMetodoPago] = useState<'efectivo' | 'transferencia'>('efectivo');
-  const [referenciaTransferencia, setReferenciaTransferencia] = useState('');
-  const [montoPagado, setMontoPagado] = useState(0);
 
-  // Financial values
-  const [selectedCourseCosto, setSelectedCourseCosto] = useState(0);
-  const [balancePendiente, setBalancePendiente] = useState(0);
-
-  // Invoice & Modal states
-  const [generatedInvoice, setGeneratedInvoice] = useState<any>(null);
-  const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
+  const [enrolledStudent, setEnrolledStudent] = useState<Student | null>(null);
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [error, setError] = useState('');
 
-  // Cargar costo del curso seleccionado
-  useEffect(() => {
-    if (cursoId) {
-      const course = courses.find((c) => c.id === cursoId);
-      if (course) {
-        setSelectedCourseCosto(course.costo);
-        setMontoPagado(course.costo); // Autocompleta con el pago completo por defecto
-      }
-    } else {
-      setSelectedCourseCosto(0);
-      setMontoPagado(0);
-    }
-  }, [cursoId, courses]);
+  const selectedCourseCost = cursoId
+    ? courses.find((c) => c.id === cursoId)?.costo ?? 0
+    : 0;
 
-  // Recalcular balance pendiente
-  useEffect(() => {
-    const balance = Math.max(0, selectedCourseCosto - montoPagado);
-    setBalancePendiente(balance);
-  }, [selectedCourseCosto, montoPagado]);
-
-  // Sincronizar datos si es estudiante existente
   useEffect(() => {
     if (!isNewStudent && existingStudentId) {
       const stud = students.find((s) => s.id === existingStudentId);
       if (stud) {
         setNombreCompleto(stud.nombreCompleto);
         setTelefono(stud.telefono);
-        setCedula(stud.cedula);
-        setDireccion(stud.direccion);
+        setCedula(stud.cedula || '');
+        setDireccion(stud.direccion || '');
       }
     }
   }, [isNewStudent, existingStudentId, students]);
@@ -82,50 +151,37 @@ export const Enroll: React.FC = () => {
     e.preventDefault();
     setError('');
 
-    if (!cursoId) {
-      setError('Por favor, seleccione un curso válido.');
-      return;
-    }
+    const validationResult = getEnrollSchema(courses).safeParse({
+      isNewStudent,
+      nombreCompleto,
+      telefono,
+      fechaNacimiento,
+      direccion,
+      cedula,
+      existingStudentId,
+      cursoId,
+      horario,
+    });
 
-    if (isNewStudent) {
-      if (!nombreCompleto.trim() || !telefono.trim() || !cedula.trim() || !direccion.trim()) {
-        setError('Complete toda la información personal del estudiante.');
-        return;
-      }
-    } else {
-      if (!existingStudentId) {
-        setError('Por favor, seleccione un estudiante registrado.');
-        return;
-      }
-    }
-
-    if (montoPagado <= 0) {
-      setError('El monto pagado debe ser mayor a cero.');
-      return;
-    }
-
-    if (metodoPago === 'transferencia' && !referenciaTransferencia.trim()) {
-      setError('Escriba el número de referencia para la transferencia bancaria.');
+    if (!validationResult.success) {
+      setError(validationResult.error.issues[0].message);
       return;
     }
 
     try {
-      const invoice = enrollStudent(
-        {
-          nombreCompleto,
-          telefono,
-          cedula,
-          direccion,
-          cursoId
-        },
-        montoPagado,
-        metodoPago,
-        referenciaTransferencia || undefined
-      );
+      const student = enrollStudent({
+        nombreCompleto,
+        telefono,
+        cedula,
+        direccion,
+        fechaNacimiento,
+        cursoId,
+        horario,
+      });
 
-      // Abrir modal de factura
-      setGeneratedInvoice(invoice);
-      setIsInvoiceModalOpen(true);
+      setEnrolledStudent(student);
+      setIsConfirmModalOpen(true);
+      setTimeout(() => window.print(), 500);
       resetForm();
     } catch (err: any) {
       setError(err.message || 'Ocurrió un error al inscribir.');
@@ -135,39 +191,35 @@ export const Enroll: React.FC = () => {
   const resetForm = () => {
     setIsNewStudent(true);
     setExistingStudentId('');
+    setStudentSearchTerm('');
+    setIsDropdownOpen(false);
     setNombreCompleto('');
     setTelefono('');
+    setFechaNacimiento('');
     setCedula('');
     setDireccion('');
     setCursoId('');
-    setMetodoPago('efectivo');
-    setReferenciaTransferencia('');
-    setMontoPagado(0);
-    setSelectedCourseCosto(0);
-    setBalancePendiente(0);
+    setHorario('');
   };
 
   const handlePrint = () => {
-    window.print();
+    setTimeout(() => window.print(), 300);
   };
 
   return (
     <div className="flex flex-col gap-8 animate-fade-in">
-      {/* Header */}
       <div className="flex flex-col gap-1.5 no-print">
         <h1 className="text-2xl font-extrabold text-slate-800 tracking-tight leading-none">
-          Inscribir y Facturar Alumno
+          Inscribir Alumno
         </h1>
         <p className="text-sm font-semibold text-slate-400">
-          Registra matrículas académicas, recibe pagos y genera facturas automáticas al instante.
+          Registra un nuevo alumno en el curso seleccionado. La deuda se genera automáticamente.
         </p>
       </div>
 
-      {/* Form Grid */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 no-print">
-        {/* Left Column: Form (2 Cols) */}
         <div className="xl:col-span-2">
-          <Card title="Punto de Venta e Inscripciones (POS)">
+          <Card title="Formulario de Inscripción">
             <form onSubmit={handleSubmit} className="flex flex-col gap-6">
               {error && (
                 <div className="flex items-center gap-2.5 p-3.5 bg-rose-50 border border-rose-100 rounded-xl text-rose-700 text-xs font-semibold">
@@ -176,7 +228,6 @@ export const Enroll: React.FC = () => {
                 </div>
               )}
 
-              {/* Toggles del Estudiante */}
               <div className="flex items-center gap-4 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                 <Button
                   variant={isNewStudent ? 'primary' : 'outline'}
@@ -186,6 +237,7 @@ export const Enroll: React.FC = () => {
                     setIsNewStudent(true);
                     setNombreCompleto('');
                     setTelefono('');
+                    setFechaNacimiento('');
                     setCedula('');
                     setDireccion('');
                   }}
@@ -202,7 +254,6 @@ export const Enroll: React.FC = () => {
                 </Button>
               </div>
 
-              {/* Formulario Dinámico según Tipo de Estudiante */}
               {isNewStudent ? (
                 <div className="flex flex-col gap-4">
                   <Input
@@ -214,47 +265,82 @@ export const Enroll: React.FC = () => {
                     required
                   />
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <Input
-                      label="Cédula *"
-                      value={cedula}
-                      onChange={(e) => setCedula(e.target.value)}
-                      placeholder="001-1234567-8"
-                      required
+                      label="Fecha Nacimiento *"
+                      type="date"
+                      value={fechaNacimiento}
+                      onChange={(e) => setFechaNacimiento(e.target.value)}
                     />
                     <Input
-                      label="Teléfono de Contacto *"
+                      label="Teléfono *"
                       value={telefono}
                       onChange={(e) => setTelefono(e.target.value)}
                       placeholder="809-555-0123"
-                      required
+                    />
+                    <Input
+                      label="Cédula"
+                      value={cedula}
+                      onChange={(e) => setCedula(e.target.value)}
+                      placeholder="Opcional < 18 años"
                     />
                   </div>
 
                   <div className="flex flex-col gap-1.5">
                     <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                      Dirección de Residencia *
+                      Dirección de Residencia
                     </label>
                     <textarea
                       value={direccion}
                       onChange={(e) => setDireccion(e.target.value)}
-                      placeholder="Dirección física completa..."
+                      placeholder="Dirección física completa (Opcional)..."
                       className="w-full px-4 py-2.5 bg-white border border-slate-200 focus:ring-brand-100 focus:border-brand-500 rounded-xl text-slate-800 text-sm transition-all duration-200 focus:outline-hidden focus:ring-4 h-16"
-                      required
                     />
                   </div>
                 </div>
               ) : (
                 <div className="flex flex-col gap-4">
-                  <Select
-                    label="Seleccionar Estudiante Existente *"
-                    value={existingStudentId}
-                    onChange={(e) => setExistingStudentId(e.target.value)}
-                    options={[
-                      { value: '', label: 'Seleccione un alumno...' },
-                      ...students.map((s) => ({ value: s.id, label: `${s.nombreCompleto} (${s.matricula})` }))
-                    ]}
-                  />
+                  <div className="relative flex flex-col gap-1.5">
+                    <Input
+                      label="Buscar Estudiante (Nombre o Cédula) *"
+                      value={studentSearchTerm}
+                      onChange={(e) => {
+                        setStudentSearchTerm(e.target.value);
+                        setIsDropdownOpen(true);
+                        if (!e.target.value) setExistingStudentId('');
+                      }}
+                      onFocus={() => setIsDropdownOpen(true)}
+                      onBlur={() => setTimeout(() => setIsDropdownOpen(false), 200)}
+                      placeholder="Ej: Laura o 001..."
+                      icon={<Search className="w-4.5 h-4.5 text-slate-400" />}
+                    />
+
+                    {isDropdownOpen && studentSearchTerm && (
+                      <div className="absolute top-[64px] left-0 right-0 z-50 mt-1 max-h-60 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-lg p-1">
+                        {filteredExistingStudents.length > 0 ? (
+                          filteredExistingStudents.map((s) => (
+                            <button
+                              key={s.id}
+                              type="button"
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-brand-50 rounded-lg transition-colors flex flex-col"
+                              onMouseDown={() => {
+                                setExistingStudentId(s.id);
+                                setStudentSearchTerm(s.nombreCompleto);
+                                setIsDropdownOpen(false);
+                              }}
+                            >
+                              <span className="font-bold text-slate-800">{s.nombreCompleto}</span>
+                              <span className="text-[10px] font-semibold text-slate-400">Cédula: {s.cedula || 'N/A'} - Matrícula: {s.matricula}</span>
+                            </button>
+                          ))
+                        ) : (
+                          <div className="px-3 py-4 text-center text-sm text-slate-500 font-semibold">
+                            No se encontraron estudiantes.
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                   {existingStudentId && (
                     <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl flex flex-col gap-2.5 text-xs text-slate-600 font-semibold">
                       <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Información Sincronizada</span>
@@ -267,87 +353,57 @@ export const Enroll: React.FC = () => {
                 </div>
               )}
 
-              {/* Sección Académica y de Cobro */}
               <div className="border-t border-slate-100 pt-6 flex flex-col gap-4">
-                <Select
-                  label="Curso a Inscribir *"
-                  value={cursoId}
-                  onChange={(e) => setCursoId(e.target.value)}
-                  options={[
-                    { value: '', label: 'Seleccionar curso...' },
-                    ...courses
-                      .filter((c) => c.estado === 'activo')
-                      .map((c) => ({ value: c.id, label: `${c.nombre} (${formatCurrency(c.costo)})` }))
-                  ]}
-                />
-
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <Select
-                    label="Método de Pago *"
-                    value={metodoPago}
-                    onChange={(e) => setMetodoPago(e.target.value as 'efectivo' | 'transferencia')}
+                    label="Curso a Inscribir *"
+                    value={cursoId}
+                    onChange={(e) => setCursoId(e.target.value)}
                     options={[
-                      { value: 'efectivo', label: 'Efectivo' },
-                      { value: 'transferencia', label: 'Transferencia Bancaria' }
+                      { value: '', label: 'Seleccionar curso...' },
+                      ...courses
+                        .filter((c) => c.estado === 'activo')
+                        .map((c) => ({ value: c.id, label: `${c.nombre} (${formatCurrency(c.costo)})` }))
                     ]}
                   />
-                  <Input
-                    label="Monto a Cobrar / Abonar ($) *"
-                    type="number"
-                    value={montoPagado}
-                    onChange={(e) => setMontoPagado(Number(e.target.value))}
-                    placeholder="150"
-                    icon={<Coins className="w-4.5 h-4.5 text-slate-400" />}
-                    required
+                  <Select
+                    label="Horario Asignado *"
+                    value={horario}
+                    onChange={(e) => setHorario(e.target.value)}
+                    options={[
+                      { value: '', label: 'Elegir tanda...' },
+                      { value: '9:00 am - 12:00 pm', label: 'Mañana (9:00 am - 12:00 pm)' },
+                      { value: '2:00 pm - 5:00 pm', label: 'Tarde (2:00 pm - 5:00 pm)' }
+                    ]}
                   />
                 </div>
-
-                {metodoPago === 'transferencia' && (
-                  <Input
-                    label="Referencia de Transferencia *"
-                    value={referenciaTransferencia}
-                    onChange={(e) => setReferenciaTransferencia(e.target.value)}
-                    placeholder="Nro. Aprobación / Código de banco"
-                    required
-                  />
-                )}
               </div>
 
-              {/* Botón de Enviar */}
               <div className="pt-4 border-t border-slate-100 flex justify-end">
                 <Button variant="success" type="submit" size="lg" fullWidth icon={<CreditCard className="w-4.5 h-4.5" />}>
-                  Completar Inscripción e Imprimir
+                  Completar Inscripción
                 </Button>
               </div>
             </form>
           </Card>
         </div>
 
-        {/* Right Column: Live Calculations Summary Card */}
         <div className="xl:col-span-1">
-          <Card title="Desglose Financiero" subtitle="Detalle de cobros en tiempo real">
+          <Card title="Resumen de Inscripción" subtitle="Detalle del curso seleccionado">
             <div className="flex flex-col gap-5 text-sm font-semibold text-slate-700">
               <div className="flex items-center justify-between">
-                <span className="text-slate-400 font-bold uppercase text-xs">Costo Programa</span>
-                <span className="text-slate-800 font-extrabold">{formatCurrency(selectedCourseCosto)}</span>
+                <span className="text-slate-400 font-bold uppercase text-xs">Costo del Programa</span>
+                <span className="text-slate-800 font-extrabold">{formatCurrency(selectedCourseCost)}</span>
               </div>
               <div className="flex items-center justify-between border-b border-slate-100 pb-4">
                 <span className="text-slate-400 font-bold uppercase text-xs">Duración</span>
                 <span className="text-slate-800 font-extrabold">3 meses</span>
               </div>
-
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400 font-bold uppercase text-xs">Monto Abonado</span>
-                <span className="text-emerald-600 font-extrabold">{formatCurrency(montoPagado)}</span>
-              </div>
-              <div className="flex items-center justify-between border-t border-slate-100 pt-4 pb-1">
-                <span className="text-slate-400 font-bold uppercase text-xs">Balance Pendiente</span>
-                <span className={`text-base font-extrabold ${balancePendiente > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                  {formatCurrency(balancePendiente)}
-                </span>
+              <div className="flex items-center justify-between border-t border-slate-100 pt-4">
+                <span className="text-rose-600 font-black uppercase text-xs">Total a Pagar (Deuda)</span>
+                <span className="text-rose-600 font-black text-lg">{formatCurrency(selectedCourseCost)}</span>
               </div>
 
-              {/* Checklist visual para dar look premium */}
               <div className="flex flex-col gap-3 bg-slate-50 border border-slate-100 p-4.5 rounded-2xl mt-2 text-xs font-bold text-slate-500">
                 <div className="flex items-center gap-2">
                   <div className="w-1.5 h-1.5 rounded-full bg-brand-500" />
@@ -355,11 +411,11 @@ export const Enroll: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="w-1.5 h-1.5 rounded-full bg-brand-500" />
-                  <span>Inscripción registrada en cierre de caja diario</span>
+                  <span>Deuda registrada por el costo total del curso</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="w-1.5 h-1.5 rounded-full bg-brand-500" />
-                  <span>Impresión directa de ticket disponible</span>
+                  <span>Los pagos se realizan en <strong>Registrar Abono</strong></span>
                 </div>
               </div>
             </div>
@@ -367,124 +423,90 @@ export const Enroll: React.FC = () => {
         </div>
       </div>
 
-      {/* ========================================================================= */}
-      {/* INVOICE MODAL OVERLAY (Visible en Impresión también) */}
-      {/* ========================================================================= */}
-      {generatedInvoice && (
-        <Modal
-          isOpen={isInvoiceModalOpen}
-          onClose={() => setIsInvoiceModalOpen(false)}
-          title="Factura de Inscripción Generada"
-          size="md"
-        >
-          {/* Vista Factura Estilo Ticket */}
-          <div className="flex flex-col gap-6" id="invoice-printable">
-            <div className="ticket-print bg-white p-6 rounded-2xl border border-slate-100 shadow-xs flex flex-col font-sans">
-              {/* Header Factura */}
-              <div className="flex flex-col items-center justify-center text-center gap-1 pb-4.5 border-b border-dashed border-slate-200">
-                <div className="p-2.5 rounded-full bg-brand-50 text-brand-600 border border-brand-100">
-                  <GraduationCap className="w-6 h-6" />
-                </div>
-                <span className="font-extrabold text-base text-slate-800 tracking-tight mt-1">ACADEMIA DE CURSOS</span>
-                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none">RNC 1-01-20304-2 • Santo Domingo, R.D.</span>
-              </div>
+      {/* Modal de Confirmación de Inscripción */}
+      {enrolledStudent && (() => {
+        const course = courses.find((c) => c.id === enrolledStudent.cursoId);
+        return (
+          <Modal
+            isOpen={isConfirmModalOpen}
+            onClose={() => setIsConfirmModalOpen(false)}
+            title="Inscripción Confirmada"
+            size="md"
+          >
+            <div className="flex flex-col gap-6 w-full" id="invoice-printable-container">
+              <div id="invoice-printable">
+                <div className="ticket-print relative overflow-hidden bg-white p-7 rounded-[2rem] border border-slate-100 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.1)] flex flex-col font-sans">
+                  <div className="absolute -top-12 -right-12 w-32 h-32 bg-brand-50 rounded-full opacity-60" data-html2canvas-ignore="true"></div>
 
-              {/* Meta Factura */}
-              <div className="grid grid-cols-2 gap-y-2 py-4 border-b border-dashed border-slate-200 text-xs font-semibold text-slate-600">
-                <div className="flex flex-col">
-                  <span className="text-[9px] font-extrabold text-slate-400 uppercase">Factura No.</span>
-                  <span className="text-slate-800 font-mono font-bold mt-0.5">{generatedInvoice.id}</span>
-                </div>
-                <div className="flex flex-col items-end">
-                  <span className="text-[9px] font-extrabold text-slate-400 uppercase">Matrícula</span>
-                  <span className="text-slate-800 font-mono font-bold mt-0.5">{generatedInvoice.matricula}</span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-[9px] font-extrabold text-slate-400 uppercase">Fecha Pago</span>
-                  <span className="text-slate-800 mt-0.5">{generatedInvoice.fecha}</span>
-                </div>
-                <div className="flex flex-col items-end">
-                  <span className="text-[9px] font-extrabold text-slate-400 uppercase">Hora Pago</span>
-                  <span className="text-slate-800 mt-0.5">{generatedInvoice.hora}</span>
-                </div>
-              </div>
-
-              {/* Detalles Estudiante & Curso */}
-              <div className="flex flex-col gap-2.5 py-4 border-b border-dashed border-slate-200 text-xs text-slate-600 font-semibold">
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Estudiante:</span>
-                  <span className="text-slate-800 font-bold text-right">{generatedInvoice.estudianteNombre}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Curso Inscrito:</span>
-                  <span className="text-slate-800 font-bold text-right">{generatedInvoice.cursoNombre}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Método Pago:</span>
-                  <Badge variant={generatedInvoice.metodoPago === 'efectivo' ? 'success' : 'info'}>
-                    {generatedInvoice.metodoPago}
-                  </Badge>
-                </div>
-                {generatedInvoice.referenciaTransferencia && (
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Referencia Transf:</span>
-                    <span className="text-slate-800 font-bold font-mono">{generatedInvoice.referenciaTransferencia}</span>
+                  <div className="relative flex flex-col items-center justify-center text-center gap-2 pb-6 border-b border-slate-100">
+                    <div className="p-3.5 rounded-2xl bg-gradient-to-br from-brand-50 to-brand-100 text-brand-600 shadow-inner">
+                      <GraduationCap className="w-7 h-7" />
+                    </div>
+                    <span className="font-black text-xl text-slate-800 tracking-tight mt-2">ACADEMIA DE CURSOS</span>
+                    <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest leading-none">Comprobante de Inscripción</span>
                   </div>
-                )}
+
+                  <div className="grid grid-cols-2 gap-y-4 py-5 border-b border-slate-100 text-xs font-semibold text-slate-600">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Matrícula</span>
+                      <span className="text-brand-700 font-mono font-bold mt-1 bg-brand-50 self-start px-2 py-0.5 rounded-md border border-brand-100">{enrolledStudent.matricula}</span>
+                    </div>
+                    <div className="flex flex-col items-end">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Fecha</span>
+                      <span className="text-slate-800 mt-1 font-bold">{new Date(enrolledStudent.fechaInscripcion).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-3 py-5 border-b border-slate-100 text-xs text-slate-600 font-semibold">
+                    <div className="flex justify-between items-center p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                      <div className="flex flex-col">
+                        <span className="text-[10px] text-slate-400 font-black uppercase">Estudiante</span>
+                        <span className="text-slate-800 font-black text-sm mt-0.5">{enrolledStudent.nombreCompleto}</span>
+                      </div>
+                      <User className="w-5 h-5 text-slate-300" />
+                    </div>
+
+                    <div className="flex justify-between mt-1">
+                      <span className="text-slate-500">Curso Inscrito:</span>
+                      <span className="text-slate-800 font-bold text-right">{course?.nombre || 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Horario Asignado:</span>
+                      <span className="text-brand-600 font-black text-right">{enrolledStudent.horario || 'N/A'}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col py-5 text-xs text-slate-600 font-semibold gap-3">
+                    <div className="flex justify-between items-center p-3 bg-gradient-to-r from-slate-800 to-slate-900 text-white rounded-xl shadow-md">
+                      <span className="uppercase text-[10px] font-black tracking-widest text-slate-300">Deuda Total del Curso</span>
+                      <span className="text-lg font-black text-white">{formatCurrency(enrolledStudent.balancePendiente)}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col items-center justify-center text-center mt-2 text-[9px] font-black text-slate-400 uppercase tracking-widest leading-relaxed">
+                    <span>RNC 1-01-20304-2 • www.academiadecursos.edu.do</span>
+                    <span className="mt-1">¡Bienvenido!</span>
+                  </div>
+                </div>
               </div>
 
-              {/* Total Financiero */}
-              <div className="flex flex-col gap-2 py-4.5 text-xs text-slate-600 font-semibold bg-slate-50/50 -mx-6 px-6 border-b border-slate-100">
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-400 uppercase font-bold text-[10px]">Total Cursado</span>
-                  <span className="text-slate-800 font-extrabold">{formatCurrency(selectedCourseCosto || generatedInvoice.montoPagado + generatedInvoice.balance)}</span>
-                </div>
-                <div className="flex justify-between items-center text-emerald-600 font-bold">
-                  <span className="uppercase text-[10px]">Monto Pagado</span>
-                  <span className="text-sm font-extrabold">{formatCurrency(generatedInvoice.montoPagado)}</span>
-                </div>
-                <div className="flex justify-between items-center border-t border-slate-200/50 pt-2 text-rose-600 font-bold">
-                  <span className="uppercase text-[10px]">Balance Restante</span>
-                  <span className="text-sm font-extrabold">{formatCurrency(generatedInvoice.balance)}</span>
-                </div>
+              <div className="flex items-center gap-3 pt-3 border-t border-slate-100 no-print">
+                <Button variant="outline" className="flex-1" icon={<Printer className="w-4 h-4" />} onClick={handlePrint}>
+                  Imprimir Comprobante
+                </Button>
+                <Button variant="secondary" className="flex-1" onClick={() => setIsConfirmModalOpen(false)}>
+                  Cerrar
+                </Button>
               </div>
-
-              {/* Pie de Página Factura */}
-              <div className="flex flex-col items-center justify-center text-center mt-5 text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-normal">
-                <span>¡Gracias por inscribirte con nosotros!</span>
-                <span className="mt-1">Conservar comprobante para sus cuadres</span>
+              <div className="no-print pt-2 flex justify-center">
+                <p className="text-xs font-semibold text-slate-400 text-center">
+                  Para realizar pagos, vaya a la sección <strong>Registrar Abono</strong> en el menú lateral.
+                </p>
               </div>
             </div>
-
-            {/* Acciones de la factura (No-print) */}
-            <div className="flex items-center gap-3 pt-3 border-t border-slate-100 no-print">
-              <Button
-                variant="outline"
-                className="flex-1"
-                icon={<Printer className="w-4 h-4" />}
-                onClick={handlePrint}
-              >
-                Imprimir Ticket
-              </Button>
-              <Button
-                variant="primary"
-                className="flex-1"
-                icon={<FileDown className="w-4 h-4" />}
-                onClick={() => {
-                  alert('¡Simulando Exportación a PDF de Factura exitosamente!');
-                }}
-              >
-                Exportar PDF
-              </Button>
-            </div>
-            <div className="no-print pt-2 flex justify-center">
-              <Button variant="secondary" size="sm" onClick={() => setIsInvoiceModalOpen(false)}>
-                Cerrar Ventana
-              </Button>
-            </div>
-          </div>
-        </Modal>
-      )}
+          </Modal>
+        );
+      })()}
     </div>
   );
 };

@@ -1,9 +1,15 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { Course, Teacher, Student, Payment, CashClosure } from '../types';
-import { INITIAL_COURSES, INITIAL_TEACHERS } from '../utils/initialData';
 import { dbService } from '../services/db.service';
 import { format } from 'date-fns';
+
+// ==========================================
+// ESTADO INICIAL VACÍO
+// El sistema inicia sin datos de ejemplo.
+// El administrador debe crear cursos y profesores antes de inscribir alumnos.
+// Los datos se persisten automáticamente en localStorage.
+// ==========================================
 
 interface AcademyState {
   courses: Course[];
@@ -28,13 +34,18 @@ interface AcademyState {
   updateStudent: (student: Student) => void;
   deleteStudent: (id: string) => void;
 
-  // Sistema de Inscripción & Facturación
+  // Sistema de Inscripción (solo registra al alumno, sin pago)
   enrollStudent: (
-    studentData: Omit<Student, 'id' | 'matricula' | 'fechaInscripcion' | 'balancePendiente'>,
+    studentData: Omit<Student, 'id' | 'matricula' | 'fechaInscripcion' | 'balancePendiente' | 'inscripcionGratis'>
+  ) => Student; // Devuelve el estudiante inscrito
+
+  // Sistema de Abonos (Pagos a estudiantes existentes)
+  registerPayment: (
+    studentId: string,
     montoPagado: number,
     metodoPago: 'efectivo' | 'transferencia',
     referenciaTransferencia?: string
-  ) => Payment; // Devuelve la factura generada
+  ) => Payment;
 
   // Cierre de Caja Actions
   checkOrCreateDailyClosure: () => void;
@@ -51,8 +62,8 @@ const getCurrentTimeStr = () => format(new Date(), 'HH:mm');
 export const useAcademyStore = create<AcademyState>()(
   persist(
     (set, get) => ({
-      courses: INITIAL_COURSES,
-      teachers: INITIAL_TEACHERS,
+      courses: [],
+      teachers: [],
       students: [],
       payments: [],
       closures: [],
@@ -145,11 +156,21 @@ export const useAcademyStore = create<AcademyState>()(
       // ==========================================
       // SISTEMA DE INSCRIPCIÓN Y PAGOS (POS)
       // ==========================================
-      enrollStudent: (studentData, montoPagado, metodoPago, referenciaTransferencia) => {
-        // Aseguramos primero que exista un cierre de caja del día de hoy abierto
-        get().checkOrCreateDailyClosure();
-
+      enrollStudent: (studentData) => {
         const state = get();
+
+        // Validar duplicidad por cédula
+        if (studentData.cedula && studentData.cedula.trim()) {
+          const existing = state.students.find(
+            (s) => s.cedula && s.cedula.trim() === studentData.cedula!.trim()
+          );
+          if (existing) {
+            throw new Error(
+              `Ya existe un estudiante registrado con la cédula ${studentData.cedula}: ${existing.nombreCompleto} (${existing.matricula})`
+            );
+          }
+        }
+
         const course = state.courses.find((c) => c.id === studentData.cursoId);
         if (!course) {
           throw new Error('El curso seleccionado no existe');
@@ -161,42 +182,71 @@ export const useAcademyStore = create<AcademyState>()(
         const matriculaCount = state.students.length + 1;
         const matricula = `MAT-${currentYear}-${String(matriculaCount).padStart(4, '0')}`;
 
-        // 2. Calcular saldos financieros
-        const costoCurso = course.costo;
-        const balancePendiente = Math.max(0, costoCurso - montoPagado);
-
-        // 3. Crear Registro de Estudiante
+        // 2. Crear Registro de Estudiante (deuda total = costo del curso)
         const nuevoEstudiante: Student = {
           id: studentId,
           nombreCompleto: studentData.nombreCompleto,
           telefono: studentData.telefono,
           cedula: studentData.cedula,
           direccion: studentData.direccion,
+          fechaNacimiento: studentData.fechaNacimiento,
           matricula,
           fechaInscripcion: new Date().toISOString(),
-          balancePendiente,
-          cursoId: studentData.cursoId
+          balancePendiente: course.costo,
+          cursoId: studentData.cursoId,
+          horario: studentData.horario,
+          inscripcionGratis: false
         };
 
-        // 4. Crear Registro de Factura / Pago
+        // 3. Actualizar Estado Global (solo estudiante, sin pago)
+        set({
+          students: [...state.students, nuevoEstudiante]
+        });
+
+        return nuevoEstudiante;
+      },
+
+      // ==========================================
+      // SISTEMA DE ABONOS (PAGOS A ESTUDIANTES EXISTENTES)
+      // ==========================================
+      registerPayment: (studentId, montoPagado, metodoPago, referenciaTransferencia) => {
+        get().checkOrCreateDailyClosure();
+
+        const state = get();
+        const student = state.students.find((s) => s.id === studentId);
+        if (!student) {
+          throw new Error('Estudiante no encontrado');
+        }
+
+        const course = state.courses.find((c) => c.id === student.cursoId);
+        const nuevoBalance = Math.max(0, student.balancePendiente - montoPagado);
+
+        // 1. Crear Registro de Factura / Pago
         const invoiceCount = state.payments.length + 1;
         const invoiceId = `FAC-${1000 + invoiceCount}`;
         const nuevoPago: Payment = {
           id: invoiceId,
-          matricula,
-          estudianteId: studentId,
-          estudianteNombre: studentData.nombreCompleto,
-          cursoId: studentData.cursoId,
-          cursoNombre: course.nombre,
+          matricula: student.matricula,
+          estudianteId: student.id,
+          estudianteNombre: student.nombreCompleto,
+          cursoId: student.cursoId,
+          cursoNombre: course?.nombre || '',
           montoPagado,
-          balance: balancePendiente,
+          balance: nuevoBalance,
           metodoPago,
           referenciaTransferencia,
           fecha: getTodayDateStr(),
-          hora: getCurrentTimeStr()
+          hora: getCurrentTimeStr(),
+          horario: student.horario,
+          costoInscripcion: 0
         };
 
-        // 5. Actualizar el Cierre de Caja Diario Activo
+        // 2. Actualizar balance del estudiante
+        const updatedStudents = state.students.map((s) =>
+          s.id === studentId ? { ...s, balancePendiente: nuevoBalance } : s
+        );
+
+        // 3. Actualizar el Cierre de Caja Diario Activo
         const todayDate = getTodayDateStr();
         const updatedClosures = state.closures.map((closure) => {
           if (closure.fecha === todayDate && !closure.cerrado) {
@@ -207,16 +257,15 @@ export const useAcademyStore = create<AcademyState>()(
               totalTransferencia: closure.totalTransferencia + (!isEfectivo ? montoPagado : 0),
               totalGeneral: closure.totalGeneral + montoPagado,
               cantidadPagos: closure.cantidadPagos + 1,
-              cantidadEstudiantesInscritos: closure.cantidadEstudiantesInscritos + 1,
               pagos: [...closure.pagos, nuevoPago]
             };
           }
           return closure;
         });
 
-        // 6. Actualizar Estado Global
+        // 4. Actualizar Estado Global
         set({
-          students: [...state.students, nuevoEstudiante],
+          students: updatedStudents,
           payments: [...state.payments, nuevoPago],
           closures: updatedClosures
         });

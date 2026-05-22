@@ -23,12 +23,15 @@ export interface Student {
   id: string;
   nombreCompleto: string;
   telefono: string;
-  cedula: string;
-  direccion: string;
+  cedula?: string;
+  direccion?: string;
+  fechaNacimiento: string; // YYYY-MM-DD
   matricula: string; // MAT-YYYY-XXXX (generado automáticamente)
   fechaInscripcion: string; // ISO string
   balancePendiente: number;
   cursoId: string; // Curso en el que está inscrito
+  horario: string;
+  inscripcionGratis: boolean;
 }
 
 export interface Payment {
@@ -44,6 +47,8 @@ export interface Payment {
   referenciaTransferencia?: string; // Para transferencias bancarias
   fecha: string; // YYYY-MM-DD
   hora: string;  // HH:MM
+  horario?: string;
+  costoInscripcion?: number;
 }
 
 export interface CashClosure {
