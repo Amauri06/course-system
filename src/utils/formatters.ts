@@ -75,3 +75,19 @@ export const getModuleTotalCost = (course: any): number => {
 export const inputValue = (val: number | undefined | null): string => {
   return val ? val.toString() : '';
 };
+
+const stripNonDigits = (v: string) => v.replace(/\D/g, '');
+
+export const formatCedula = (value: string): string => {
+  const digits = stripNonDigits(value).slice(0, 11);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 10) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 10)}-${digits.slice(10)}`;
+};
+
+export const formatPhone = (value: string): string => {
+  const digits = stripNonDigits(value).slice(0, 10);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+};

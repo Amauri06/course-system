@@ -17,12 +17,12 @@ import {
   Wallet,
   Coins
 } from 'lucide-react';
-import { formatCurrency, inputValue, getIntervalDays, getTotalCourseCost } from '../utils/formatters';
+import { formatCurrency, inputValue, getIntervalDays, getTotalCourseCost, formatCedula, formatPhone } from '../utils/formatters';
 import { z } from 'zod';
 import { differenceInYears } from 'date-fns';
 import type { Course, Student } from '../types';
 
-const getEnrollSchema = (courses: Course[]) => {
+const getEnrollSchema = (courses: Course[], edadMinimaNormal = 13, edadMinimaIngles = 10) => {
   return z.object({
     isNewStudent: z.boolean(),
     nombreCompleto: z.string().optional(),
@@ -59,6 +59,12 @@ const getEnrollSchema = (courses: Course[]) => {
         code: z.ZodIssueCode.custom,
         message: 'El teléfono es obligatorio.'
       });
+    } else if (!/^\(\d{3}\) \d{3}-\d{4}$/.test(data.telefono)) {
+      ctx.addIssue({
+        path: ['telefono'],
+        code: z.ZodIssueCode.custom,
+        message: 'El teléfono debe tener el formato (809) 555-0123.'
+      });
     }
 
     if (!data.fechaNacimiento || data.fechaNacimiento.trim().length === 0) {
@@ -85,7 +91,7 @@ const getEnrollSchema = (courses: Course[]) => {
 
     if (selectedCourse) {
       const isIngles = selectedCourse.nombre.toLowerCase().includes('ingl');
-      const minAge = isIngles ? 10 : 13;
+      const minAge = isIngles ? edadMinimaIngles : edadMinimaNormal;
       if (age < minAge) {
         ctx.addIssue({
           path: ['fechaNacimiento'],
@@ -102,6 +108,12 @@ const getEnrollSchema = (courses: Course[]) => {
           code: z.ZodIssueCode.custom,
           message: 'La cédula es obligatoria para estudiantes mayores de edad (18 años o más).'
         });
+      } else if (!/^\d{3}-\d{7}-\d{1}$/.test(data.cedula)) {
+        ctx.addIssue({
+          path: ['cedula'],
+          code: z.ZodIssueCode.custom,
+          message: 'La cédula debe tener el formato 001-1234567-8.'
+        });
       }
     }
   });
@@ -109,7 +121,7 @@ const getEnrollSchema = (courses: Course[]) => {
 
 export const Enroll: React.FC = () => {
   const navigate = useNavigate();
-  const { courses, students, enrollStudent } = useAcademyStore();
+  const { courses, students, enrollStudent, config } = useAcademyStore();
 
   const [step, setStep] = useState<'form' | 'review'>('form');
   const [isNewStudent, setIsNewStudent] = useState(true);
@@ -131,6 +143,8 @@ export const Enroll: React.FC = () => {
   const [fechaNacimiento, setFechaNacimiento] = useState('');
   const [cedula, setCedula] = useState('');
   const [direccion, setDireccion] = useState('');
+
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const [cursoId, setCursoId] = useState('');
 
@@ -162,10 +176,11 @@ export const Enroll: React.FC = () => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setFieldErrors({});
 
     if (step === 'review') return;
 
-    const validationResult = getEnrollSchema(courses).safeParse({
+    const validationResult = getEnrollSchema(courses, config.edadMinimaNormal, config.edadMinimaIngles).safeParse({
       isNewStudent,
       nombreCompleto,
       telefono,
@@ -178,6 +193,14 @@ export const Enroll: React.FC = () => {
     });
 
     if (!validationResult.success) {
+      const fieldMap: Record<string, string> = {};
+      for (const issue of validationResult.error.issues) {
+        const path = issue.path[0] as string;
+        if (!fieldMap[path]) {
+          fieldMap[path] = issue.message;
+        }
+      }
+      setFieldErrors(fieldMap);
       setError(validationResult.error.issues[0].message);
       return;
     }
@@ -193,6 +216,7 @@ export const Enroll: React.FC = () => {
     }
 
     setStep('review');
+    setFieldErrors({});
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -251,6 +275,7 @@ export const Enroll: React.FC = () => {
     setMontoInscripcion(0);
     setMontoRecibido(0);
     setInscripcionMetodoPago('efectivo');
+    setFieldErrors({});
   };
 
   const handlePrint = () => {
@@ -311,30 +336,35 @@ export const Enroll: React.FC = () => {
                     <Input
                       label="Nombre Completo *"
                       value={nombreCompleto}
-                      onChange={(e) => setNombreCompleto(e.target.value)}
+                      onChange={(e) => { setNombreCompleto(e.target.value); setFieldErrors(prev => ({ ...prev, nombreCompleto: '' })); }}
                       placeholder="Ej: Laura Mercedes Pérez"
                       icon={<User className="w-4.5 h-4.5" />}
+                      error={fieldErrors.nombreCompleto}
                       required
                     />
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       <Input
-                        label="Fecha Nacimiento *"
-                        type="date"
-                        value={fechaNacimiento}
-                        onChange={(e) => setFechaNacimiento(e.target.value)}
-                      />
-                      <Input
                         label="Teléfono *"
                         value={telefono}
-                        onChange={(e) => setTelefono(e.target.value)}
-                        placeholder="809-555-0123"
+                        onChange={(e) => { setTelefono(formatPhone(e.target.value)); setFieldErrors(prev => ({ ...prev, telefono: '' })); }}
+                        placeholder="(809) 555-0123"
+                        error={fieldErrors.telefono}
                       />
                       <Input
                         label="Cédula"
                         value={cedula}
-                        onChange={(e) => setCedula(e.target.value)}
-                        placeholder="Opcional < 18 años"
+                        onChange={(e) => { setCedula(formatCedula(e.target.value)); setFieldErrors(prev => ({ ...prev, cedula: '' })); }}
+                        placeholder="001-1234567-8"
+                        error={fieldErrors.cedula}
+                      />
+                      <Input
+                        label="Fecha de Nacimiento *"
+                        type="date"
+                        value={fechaNacimiento}
+                        onChange={(e) => { setFechaNacimiento(e.target.value); setFieldErrors(prev => ({ ...prev, fechaNacimiento: '' })); }}
+                        error={fieldErrors.fechaNacimiento}
+                        required
                       />
                     </div>
 
@@ -424,8 +454,10 @@ export const Enroll: React.FC = () => {
                       onChange={(e) => setHorario(e.target.value)}
                       options={[
                         { value: '', label: 'Elegir tanda...' },
-                        { value: '9:00 am - 12:00 pm', label: 'Mañana (9:00 am - 12:00 pm)' },
-                        { value: '2:00 pm - 5:00 pm', label: 'Tarde (2:00 pm - 5:00 pm)' }
+                        ...config.horarios.map(h => ({
+                          value: h.value,
+                          label: h.label,
+                        })),
                       ]}
                     />
                   </div>

@@ -148,7 +148,10 @@ export const Payments: React.FC = () => {
 
   const [generatedInvoice, setGeneratedInvoice] = useState<any>(null);
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
-  const [printMode, setPrintMode] = useState<'ticket' | 'fullpage'>('fullpage');
+  const [printMode, setPrintMode] = useState<'ticket' | 'fullpage'>(() => {
+    const state = useAcademyStore.getState();
+    return state.config.modoImpresionDefault;
+  });
   const [error, setError] = useState('');
 
   // Estado para anulación de pagos

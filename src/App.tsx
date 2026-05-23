@@ -8,6 +8,7 @@ import { Teachers } from './pages/Teachers';
 import { Students } from './pages/Students';
 import { CashRegister } from './pages/CashRegister';
 import { Payments } from './pages/Payments';
+import { Settings } from './pages/Settings';
 
 function App() {
   return (
@@ -22,6 +23,7 @@ function App() {
           <Route path="students" element={<Students />} />
           <Route path="cash-register" element={<CashRegister />} />
           <Route path="payments" element={<Payments />} />
+          <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>
     </BrowserRouter>

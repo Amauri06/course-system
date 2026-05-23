@@ -19,6 +19,16 @@ interface AcademyState {
   closures: CashClosure[];
   activeAdapter: 'localStorage' | 'supabase';
 
+  // Configuración del Sistema
+  config: {
+    horarios: { id: string; value: string; label: string }[];
+    moneda: string;
+    edadMinimaNormal: number;
+    edadMinimaIngles: number;
+    costoDefault: number;
+    modoImpresionDefault: 'ticket' | 'fullpage';
+  };
+
   // Cursos Actions
   addCourse: (course: Omit<Course, 'id'>) => void;
   updateCourse: (course: Course) => void;
@@ -64,6 +74,12 @@ interface AcademyState {
   
   // Configuración del Adaptador
   changePersistenceAdapter: (type: 'localStorage' | 'supabase') => void;
+
+  // Acciones de Configuración
+  addHorario: (horario: { value: string; label: string }) => void;
+  updateHorario: (id: string, horario: { value: string; label: string }) => void;
+  deleteHorario: (id: string) => void;
+  updateConfig: (updates: Partial<AcademyState['config']>) => void;
 }
 
 // Helpers para fechas en huso horario local
@@ -79,6 +95,17 @@ export const useAcademyStore = create<AcademyState>()(
       payments: [],
       closures: [],
       activeAdapter: 'localStorage',
+      config: {
+        horarios: [
+          { id: 'hor-1', value: '9:00 am - 12:00 pm', label: 'Mañana (9:00 am - 12:00 pm)' },
+          { id: 'hor-2', value: '2:00 pm - 5:00 pm', label: 'Tarde (2:00 pm - 5:00 pm)' },
+        ],
+        moneda: '$',
+        edadMinimaNormal: 13,
+        edadMinimaIngles: 10,
+        costoDefault: 250,
+        modoImpresionDefault: 'fullpage',
+      },
 
       // ==========================================
       // ADAPTER CONFIGURATION
@@ -86,6 +113,44 @@ export const useAcademyStore = create<AcademyState>()(
       changePersistenceAdapter: (type) => {
         dbService.setAdapter(type);
         set({ activeAdapter: type });
+      },
+
+      // ==========================================
+      // CONFIGURACIÓN DEL SISTEMA
+      // ==========================================
+      addHorario: (horario) => {
+        set((state) => ({
+          config: {
+            ...state.config,
+            horarios: [
+              ...state.config.horarios,
+              { id: `hor-${Date.now()}`, ...horario },
+            ],
+          },
+        }));
+      },
+      updateHorario: (id, horario) => {
+        set((state) => ({
+          config: {
+            ...state.config,
+            horarios: state.config.horarios.map((h) =>
+              h.id === id ? { ...h, ...horario } : h
+            ),
+          },
+        }));
+      },
+      deleteHorario: (id) => {
+        set((state) => ({
+          config: {
+            ...state.config,
+            horarios: state.config.horarios.filter((h) => h.id !== id),
+          },
+        }));
+      },
+      updateConfig: (updates) => {
+        set((state) => ({
+          config: { ...state.config, ...updates },
+        }));
       },
 
       // ==========================================
