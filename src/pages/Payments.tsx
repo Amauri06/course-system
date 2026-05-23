@@ -17,12 +17,10 @@ import {
   Calendar,
   Clock,
   CheckCircle2,
-  TrendingDown,
   Receipt,
-  Hash,
-  ArrowRight,
   XCircle,
-  AlertTriangle
+  AlertTriangle,
+  ArrowRight
 } from 'lucide-react';
 import html2pdf from 'html2pdf.js';
 import { formatCurrency, inputValue } from '../utils/formatters';
@@ -147,7 +145,6 @@ export const Payments: React.FC = () => {
   const [montoPagado, setMontoPagado] = useState(0);
   const [montoRecibido, setMontoRecibido] = useState(0);
   const [metodoPago, setMetodoPago] = useState<'efectivo' | 'transferencia'>('efectivo');
-  const [referenciaTransferencia, setReferenciaTransferencia] = useState('');
 
   const [generatedInvoice, setGeneratedInvoice] = useState<any>(null);
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
@@ -185,6 +182,8 @@ export const Payments: React.FC = () => {
         .sort((a, b) => new Date(b.fecha + ' ' + b.hora).getTime() - new Date(a.fecha + ' ' + a.hora).getTime())
     : [];
 
+  const cancelledPaymentIds = new Set(studentPayments.filter(p => p.esAnulacion).map(p => p.pagoOriginalId).filter(Boolean));
+
   const totalPaid = studentPayments.reduce((sum, p) => sum + (p.esAnulacion ? -p.montoPagado : p.montoPagado), 0);
   const totalCourseCost = getTotalCourseCost(selectedCourse);
   const progressPct = totalCourseCost > 0 ? Math.min(100, Math.round((totalPaid / totalCourseCost) * 100)) : 0;
@@ -197,7 +196,6 @@ export const Payments: React.FC = () => {
     setMontoPagado(defaultAmount);
     setMontoRecibido(defaultAmount);
     setMetodoPago('efectivo');
-    setReferenciaTransferencia('');
     setStep('form');
     setError('');
   };
@@ -221,11 +219,6 @@ export const Payments: React.FC = () => {
       return;
     }
 
-    if (metodoPago === 'transferencia' && !referenciaTransferencia.trim()) {
-      setError('Debe especificar la referencia de transferencia.');
-      return;
-    }
-
     if (montoRecibido < montoPagado) {
       setError(`El monto recibido (${formatCurrency(montoRecibido)}) no puede ser menor al monto a cobrar (${formatCurrency(montoPagado)}).`);
       return;
@@ -245,7 +238,7 @@ export const Payments: React.FC = () => {
         selectedStudent.id,
         montoPagado,
         metodoPago,
-        referenciaTransferencia || undefined,
+        undefined,
         montoRecibido,
         montoRecibido - montoPagado
       );
@@ -259,7 +252,6 @@ export const Payments: React.FC = () => {
       setMontoPagado(defaultAmount);
       setMontoRecibido(defaultAmount);
       setMetodoPago('efectivo');
-      setReferenciaTransferencia('');
     } catch (err: any) {
       setError(err.message || 'Ocurrió un error al registrar el pago.');
     }
@@ -556,28 +548,29 @@ export const Payments: React.FC = () => {
                         <th className="pb-3 pr-4"># Recibo</th>
                         <th className="pb-3 pr-4">Fecha</th>
                         <th className="pb-3 pr-4">Método</th>
-                        <th className="pb-3 pr-4">Referencia</th>
                         <th className="pb-3 pr-4 text-right">Monto</th>
                         <th className="pb-3 pr-4 text-right">Balance</th>
-                        <th className="pb-3 text-right">Imprimir</th>
+                        <th className="pb-3 text-right">Acción</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
-                      {studentPayments.map((p) => (
+                      {studentPayments.map((p) => {
+                        const isCancelled = p.esAnulacion || cancelledPaymentIds.has(p.id);
+                        return (
                         <tr
                           key={p.id}
                           className={`text-xs font-semibold transition-colors ${
-                            p.esAnulacion
+                            isCancelled
                               ? 'text-red-400 bg-red-50/40'
                               : 'text-slate-600 hover:bg-slate-50/50'
                           }`}
                         >
                           <td className="py-3 pr-4">
                             <div className="flex items-center gap-2">
-                              <span className={`font-mono font-bold ${p.esAnulacion ? 'text-red-400 line-through' : 'text-slate-800'}`}>
+                              <span className={`font-mono font-bold ${isCancelled ? 'text-red-400 line-through' : 'text-slate-800'}`}>
                                 {p.id}
                               </span>
-                              {p.esAnulacion && (
+                              {isCancelled && (
                                 <Badge variant="danger" size="sm">ANULADO</Badge>
                               )}
                               {p.pagoOriginalId && (
@@ -587,14 +580,14 @@ export const Payments: React.FC = () => {
                               )}
                             </div>
                           </td>
-                          <td className={`py-3 pr-4 ${p.esAnulacion ? 'text-red-300' : 'text-slate-500'}`}>
+                          <td className={`py-3 pr-4 ${isCancelled ? 'text-red-300' : 'text-slate-500'}`}>
                             {p.fecha} <span className="text-slate-400">{p.hora}</span>
-                            {!p.esAnulacion && (
+                            {!isCancelled && (
                               <span className="block text-[10px] font-medium text-brand-500">
                                 {getPeriodLabel(p.fecha, selectedCourse?.frecuenciaPago)}
                               </span>
                             )}
-                            {p.esAnulacion && p.motivoAnulacion && (
+                            {isCancelled && p.motivoAnulacion && (
                               <span className="block text-[10px] font-medium text-red-400 italic mt-0.5">
                                 {p.motivoAnulacion}
                               </span>
@@ -602,19 +595,16 @@ export const Payments: React.FC = () => {
                           </td>
                           <td className="py-3 pr-4">
                             <Badge
-                              variant={p.esAnulacion ? 'danger' : p.metodoPago === 'efectivo' ? 'success' : 'info'}
+                              variant={isCancelled ? 'danger' : p.metodoPago === 'efectivo' ? 'success' : 'info'}
                               size="sm"
                             >
                               {p.metodoPago}
                             </Badge>
                           </td>
-                          <td className="py-3 pr-4 font-mono text-slate-400">
-                            {p.referenciaTransferencia || '—'}
+                          <td className={`py-3 pr-4 text-right font-extrabold ${isCancelled ? 'text-red-400 line-through' : 'text-emerald-600'}`}>
+                            {isCancelled ? '-' : '+'}{formatCurrency(p.montoPagado)}
                           </td>
-                          <td className={`py-3 pr-4 text-right font-extrabold ${p.esAnulacion ? 'text-red-400 line-through' : 'text-emerald-600'}`}>
-                            {p.esAnulacion ? '-' : '+'}{formatCurrency(p.montoPagado)}
-                          </td>
-                          <td className={`py-3 pr-4 text-right font-extrabold ${p.esAnulacion ? 'text-red-300' : 'text-slate-800'}`}>
+                          <td className={`py-3 pr-4 text-right font-extrabold ${isCancelled ? 'text-red-300' : 'text-slate-800'}`}>
                             {formatCurrency(p.balance)}
                           </td>
                           <td className="py-3 text-right">
@@ -630,7 +620,7 @@ export const Payments: React.FC = () => {
                               >
                                 <Printer className="w-4 h-4" />
                               </button>
-                              {!p.esAnulacion && (
+                              {!isCancelled && (
                                 <button
                                   onClick={() => openCancelModal(p)}
                                   className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all"
@@ -642,7 +632,8 @@ export const Payments: React.FC = () => {
                             </div>
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -709,12 +700,6 @@ export const Payments: React.FC = () => {
                       <span>Método</span>
                       <span className="text-slate-800 font-bold uppercase">{metodoPago}</span>
                     </div>
-                    {metodoPago === 'transferencia' && referenciaTransferencia && (
-                      <div className="flex justify-between">
-                        <span>Referencia</span>
-                        <span className="text-slate-800 font-bold font-mono">{referenciaTransferencia}</span>
-                      </div>
-                    )}
                   </div>
 
                   <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
@@ -804,26 +789,9 @@ export const Payments: React.FC = () => {
                         </div>
                       )}
 
-                      {metodoPago === 'transferencia' && (
-                        <Input
-                          label="Referencia de Transferencia"
-                          value={referenciaTransferencia}
-                          onChange={(e) => setReferenciaTransferencia(e.target.value)}
-                          placeholder="Nro. Aprobación / Código"
-                          icon={<Hash className="w-4.5 h-4.5 text-slate-400" />}
-                          required
-                        />
-                      )}
-
                       <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-xs font-bold text-slate-500">Nuevo balance</span>
-                          <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-600">
-                            <TrendingDown className="w-3.5 h-3.5" />
-                            <span>Reduce la deuda</span>
-                          </div>
-                        </div>
                         <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-500">Nuevo Balance</span>
                           <span className="text-lg font-black text-slate-800">
                             {formatCurrency(Math.max(0, currentStudent!.balancePendiente - montoPagado))}
                           </span>
@@ -913,12 +881,6 @@ export const Payments: React.FC = () => {
                     <span className="text-slate-500">Concepto:</span>
                     <span className="text-slate-800 font-bold text-right">Pago quincenal</span>
                   </div>
-                  {generatedInvoice.referenciaTransferencia && (
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">Referencia Transf:</span>
-                      <span className="text-slate-800 font-bold font-mono">{generatedInvoice.referenciaTransferencia}</span>
-                    </div>
-                  )}
                 </div>
 
                 <div className={printMode === 'ticket' ? 'flex flex-col py-5 text-xs text-slate-600 font-semibold gap-3' : 'flex flex-col py-6 text-sm text-slate-600 font-semibold gap-4'}>

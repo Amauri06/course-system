@@ -37,6 +37,16 @@ export const Courses: React.FC = () => {
     }
   };
 
+  const getDefaultModulosForType = (tipo: string) => {
+    switch (tipo) {
+      case 'mensual': return 12;
+      case 'trimestral': return 4;
+      case 'cuatrimestral': return 3;
+      case 'semestral': return 2;
+      default: return 6;
+    }
+  };
+
   const openCreateModal = () => {
     setEditingCourse(null);
     setNombre('');
@@ -299,6 +309,7 @@ export const Courses: React.FC = () => {
                 setTipoPeriodoAcademico(tipo);
                 if (tipo !== 'personalizado') {
                   setDuracionModuloMeses(getDefaultMonthsForType(tipo));
+                  setModulos(getDefaultModulosForType(tipo));
                 }
               }}
               options={[

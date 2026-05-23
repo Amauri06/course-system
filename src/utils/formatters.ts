@@ -54,7 +54,7 @@ export const getTotalCourseCost = (course: any): number => {
   if (course.frecuenciaPago === 'unico') return course.costo;
   const intervalDays = getIntervalDays(course.frecuenciaPago);
   const monthsPerModule = course.duracionModuloMeses || 1;
-  const totalMonths = monthsPerModule * course.modulos;
+  const totalMonths = monthsPerModule * (course.modulos || 0);
   const totalPeriods = (totalMonths * 30) / intervalDays;
   return course.costo * totalPeriods;
 };

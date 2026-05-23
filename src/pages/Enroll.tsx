@@ -15,8 +15,7 @@ import {
   Search,
   CheckCircle2,
   Wallet,
-  Coins,
-  Hash
+  Coins
 } from 'lucide-react';
 import { formatCurrency, inputValue, getIntervalDays, getTotalCourseCost } from '../utils/formatters';
 import { z } from 'zod';
@@ -138,7 +137,6 @@ export const Enroll: React.FC = () => {
   const [montoInscripcion, setMontoInscripcion] = useState(0);
   const [montoRecibido, setMontoRecibido] = useState(0);
   const [inscripcionMetodoPago, setInscripcionMetodoPago] = useState<'efectivo' | 'transferencia'>('efectivo');
-  const [inscripcionReferencia, setInscripcionReferencia] = useState('');
 
   const [enrolledStudent, setEnrolledStudent] = useState<Student | null>(null);
   const [enrolledPayment, setEnrolledPayment] = useState<Record<string, any> | null>(null);
@@ -194,11 +192,6 @@ export const Enroll: React.FC = () => {
       return;
     }
 
-    if (!inscripcionGratis && inscripcionMetodoPago === 'transferencia' && !inscripcionReferencia.trim()) {
-      setError('Debe especificar la referencia de transferencia.');
-      return;
-    }
-
     setStep('review');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -223,7 +216,6 @@ export const Enroll: React.FC = () => {
           ? {
               montoRecibido,
               metodoPago: inscripcionMetodoPago,
-              referenciaTransferencia: inscripcionReferencia || undefined,
             }
           : undefined
       );
@@ -259,7 +251,6 @@ export const Enroll: React.FC = () => {
     setMontoInscripcion(0);
     setMontoRecibido(0);
     setInscripcionMetodoPago('efectivo');
-    setInscripcionReferencia('');
   };
 
   const handlePrint = () => {
@@ -535,17 +526,6 @@ export const Enroll: React.FC = () => {
                       </div>
                     )}
 
-                    {inscripcionMetodoPago === 'transferencia' && (
-                      <Input
-                        label="Referencia de Transferencia"
-                        value={inscripcionReferencia}
-                        onChange={(e) => setInscripcionReferencia(e.target.value)}
-                        placeholder="Nro. Aprobación / Código"
-                        icon={<Hash className="w-4.5 h-4.5 text-slate-400" />}
-                        required
-                      />
-                    )}
-
                     {montoInscripcion > 0 && (
                       <div className="p-4 bg-gradient-to-r from-brand-50 to-brand-100 border border-brand-200 rounded-xl flex items-center justify-between">
                         <span className="text-xs font-black text-brand-700 uppercase tracking-wider">Total a cobrar ahora</span>
@@ -571,7 +551,7 @@ export const Enroll: React.FC = () => {
 
                 <div className="flex items-center justify-between border-b border-slate-100 pb-4">
                   <span className="text-slate-400 font-bold uppercase text-xs">Duración</span>
-                  <span className="text-slate-800 font-extrabold">3 meses</span>
+                  <span className="text-slate-800 font-extrabold">{selectedCourse ? ((selectedCourse.duracionModuloMeses || 1) * (selectedCourse.modulos || 0)) + ' meses' : 'N/A'}</span>
                 </div>
 
                 <div className="flex flex-col gap-2">
@@ -835,12 +815,6 @@ export const Enroll: React.FC = () => {
                             <div className="flex justify-between items-center">
                               <span className="text-slate-500 font-bold">Método</span>
                               <span className="text-slate-800 font-bold uppercase">{enrolledPayment.metodoPago}</span>
-                            </div>
-                          )}
-                          {enrolledPayment?.referenciaTransferencia && (
-                            <div className="flex justify-between items-center">
-                              <span className="text-slate-500 font-bold">Referencia</span>
-                              <span className="text-slate-800 font-bold font-mono">{enrolledPayment.referenciaTransferencia}</span>
                             </div>
                           )}
                         </>

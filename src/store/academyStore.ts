@@ -40,7 +40,6 @@ interface AcademyState {
     paymentData?: {
       montoRecibido: number;
       metodoPago: 'efectivo' | 'transferencia';
-      referenciaTransferencia?: string;
     }
   ) => { student: Student; payment: Payment | null };
 
@@ -261,7 +260,7 @@ export const useAcademyStore = create<AcademyState>()(
             montoPagado: studentData.costoInscripcion,
             balance: totalDebt, // la inscripción no afecta balancePendiente
             metodoPago: paymentData.metodoPago,
-            referenciaTransferencia: paymentData.referenciaTransferencia,
+            referenciaTransferencia: undefined,
             fecha: hoy,
             hora,
             horario: studentData.horario,
