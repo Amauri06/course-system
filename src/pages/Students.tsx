@@ -9,8 +9,9 @@ import { Edit, Trash2, ShieldAlert, Search, Printer } from 'lucide-react';
 import { formatCurrency, formatDateStr } from '../utils/formatters';
 import { z } from 'zod';
 import { differenceInYears } from 'date-fns';
+import type { Course, Student } from '../types';
 
-export const getStudentUpdateSchema = (courses: any[]) => {
+export const getStudentUpdateSchema = (courses: Course[]) => {
   return z.object({
     nombreCompleto: z.string().min(1, 'El nombre completo es obligatorio.'),
     telefono: z.string().min(1, 'El teléfono es obligatorio.'),
@@ -53,7 +54,7 @@ export const Students: React.FC = () => {
 
   // Modal editing state
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingStudent, setEditingStudent] = useState<any>(null);
+  const [editingStudent, setEditingStudent] = useState<Student | null>(null);
 
   // Form states
   const [nombreCompleto, setNombreCompleto] = useState('');
@@ -77,7 +78,7 @@ export const Students: React.FC = () => {
     return matchesSearch && matchesCourse;
   });
 
-  const openEditModal = (student: any) => {
+  const openEditModal = (student: Student) => {
     setEditingStudent(student);
     setNombreCompleto(student.nombreCompleto);
     setTelefono(student.telefono);
@@ -132,12 +133,12 @@ export const Students: React.FC = () => {
     {
       key: 'matricula',
       header: 'Matrícula',
-      render: (row: any) => <span className="font-mono text-xs font-bold text-slate-400">{row.matricula}</span>
+      render: (row: Student) => <span className="font-mono text-xs font-bold text-slate-400">{row.matricula}</span>
     },
     {
       key: 'nombreCompleto',
       header: 'Nombre Completo',
-      render: (row: any) => (
+      render: (row: Student) => (
         <div className="flex flex-col">
           <span className="font-bold text-slate-800">{row.nombreCompleto}</span>
           <span className="text-[10px] text-slate-400 font-bold">{row.cedula}</span>
@@ -147,7 +148,7 @@ export const Students: React.FC = () => {
     {
       key: 'cursoId',
       header: 'Curso',
-      render: (row: any) => (
+      render: (row: Student) => (
         <span className="text-xs font-bold bg-slate-50 text-slate-700 px-2.5 py-1 rounded-xl border border-slate-150">
           {getCourseName(row.cursoId)}
         </span>
@@ -156,23 +157,23 @@ export const Students: React.FC = () => {
     {
       key: 'telefono',
       header: 'Contacto',
-      render: (row: any) => <span className="text-xs text-slate-500 font-bold">{row.telefono}</span>
+      render: (row: Student) => <span className="text-xs text-slate-500 font-bold">{row.telefono}</span>
     },
     {
       key: 'horario',
       header: 'Horario',
-      render: (row: any) => <span className="text-[10px] font-black tracking-wide text-brand-600 bg-brand-50 px-2 py-1 rounded-md">{row.horario || 'N/A'}</span>
+      render: (row: Student) => <span className="text-[10px] font-black tracking-wide text-brand-600 bg-brand-50 px-2 py-1 rounded-md">{row.horario || 'N/A'}</span>
     },
     {
       key: 'fechaInscripcion',
       header: 'Inscripción',
-      render: (row: any) => <span className="text-xs text-slate-400">{formatDateStr(row.fechaInscripcion)}</span>
+      render: (row: Student) => <span className="text-xs text-slate-400">{formatDateStr(row.fechaInscripcion)}</span>
     },
     {
       key: 'balancePendiente',
       header: 'Balance',
       align: 'right' as const,
-      render: (row: any) => (
+      render: (row: Student) => (
         <span className={`font-extrabold text-sm ${row.balancePendiente > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
           {formatCurrency(row.balancePendiente)}
         </span>
@@ -182,7 +183,7 @@ export const Students: React.FC = () => {
       key: 'acciones',
       header: 'Acciones',
       align: 'center' as const,
-      render: (row: any) => (
+      render: (row: Student) => (
         <div className="flex items-center justify-center gap-1">
           <button
             onClick={() => openEditModal(row)}
@@ -346,7 +347,7 @@ export const Students: React.FC = () => {
               <span className="text-[10px] font-extrabold text-amber-700 uppercase tracking-widest">Balance Pendiente</span>
               <span className="text-xs font-semibold text-amber-600 mt-0.5">Este valor se gestiona desde Cobros</span>
             </div>
-            <span className={`text-xl font-black ${editingStudent?.balancePendiente > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+            <span className={`text-xl font-black ${(editingStudent?.balancePendiente ?? 0) > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
               {formatCurrency(editingStudent?.balancePendiente ?? 0)}
             </span>
           </div>

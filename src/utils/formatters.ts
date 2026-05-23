@@ -49,7 +49,14 @@ export const getIntervalDays = (frecuencia: string): number => {
   }
 };
 
-export const getTotalCourseCost = (course: any): number => {
+interface CourseLike {
+  costo: number;
+  frecuenciaPago: string;
+  duracionModuloMeses?: number;
+  modulos?: number;
+}
+
+export const getTotalCourseCost = (course: CourseLike | null | undefined): number => {
   if (!course) return 0;
   if (course.frecuenciaPago === 'unico') return course.costo;
   const intervalDays = getIntervalDays(course.frecuenciaPago);
@@ -59,7 +66,7 @@ export const getTotalCourseCost = (course: any): number => {
   return course.costo * totalPeriods;
 };
 
-export const getModuleTotalCost = (course: any): number => {
+export const getModuleTotalCost = (course: CourseLike | null | undefined): number => {
   if (!course) return 0;
   if (course.frecuenciaPago === 'unico') return course.costo;
   const intervalDays = getIntervalDays(course.frecuenciaPago);

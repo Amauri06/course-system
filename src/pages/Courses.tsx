@@ -9,11 +9,12 @@ import { Select } from '../components/ui/Select';
 import { Plus, Edit, Trash2, ShieldAlert, GraduationCap, ToggleLeft, ToggleRight, ArrowRight } from 'lucide-react';
 import { formatCurrency } from '../utils/formatters';
 import { Link } from 'react-router-dom';
+import type { Course } from '../types';
 
 export const Courses: React.FC = () => {
   const { courses, teachers, students, addCourse, updateCourse, deleteCourse, toggleCourseState } = useAcademyStore();
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingCourse, setEditingCourse] = useState<any>(null);
+  const [editingCourse, setEditingCourse] = useState<Course | null>(null);
 
   // Form states
   const [nombre, setNombre] = useState('');
@@ -62,7 +63,7 @@ export const Courses: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const openEditModal = (course: any) => {
+  const openEditModal = (course: Course) => {
     setEditingCourse(course);
     setNombre(course.nombre);
     setCosto(course.costo);

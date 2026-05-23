@@ -17,13 +17,14 @@ import {
   Check
 } from 'lucide-react';
 import { formatCurrency, formatDateStr } from '../utils/formatters';
+import type { CashClosure, Payment } from '../types';
 import { format } from 'date-fns';
 
 export const CashRegister: React.FC = () => {
   const { closures, closeActiveClosure, reopenClosure, checkOrCreateDailyClosure, updateSaldoInicial } = useAcademyStore();
   const [activeTab, setActiveTab] = useState<'today' | 'history'>('today');
   const [selectedHistoryDate, setSelectedHistoryDate] = useState('');
-  const [viewingClosureDetail, setViewingClosureDetail] = useState<any>(null);
+  const [viewingClosureDetail, setViewingClosureDetail] = useState<CashClosure | null>(null);
   const [editingSaldo, setEditingSaldo] = useState(false);
   const [saldoInput, setSaldoInput] = useState(0);
 
@@ -55,7 +56,7 @@ export const CashRegister: React.FC = () => {
     }
   };
 
-  const handlePrintPastClosure = (closure: any) => {
+  const handlePrintPastClosure = (closure: CashClosure) => {
     setViewingClosureDetail(closure);
     setTimeout(() => {
       window.print();
@@ -66,28 +67,28 @@ export const CashRegister: React.FC = () => {
     {
       key: 'matricula',
       header: 'Matrícula',
-      render: (row: any) => <span className="font-mono text-xs font-bold text-slate-400">{row.matricula}</span>
+      render: (row: Payment) => <span className="font-mono text-xs font-bold text-slate-400">{row.matricula}</span>
     },
     {
       key: 'estudianteNombre',
       header: 'Estudiante',
-      render: (row: any) => <span className="font-bold text-slate-800">{row.estudianteNombre}</span>
+      render: (row: Payment) => <span className="font-bold text-slate-800">{row.estudianteNombre}</span>
     },
     {
       key: 'cursoNombre',
       header: 'Curso',
-      render: (row: any) => <span className="text-xs text-slate-500 font-bold">{row.cursoNombre}</span>
+      render: (row: Payment) => <span className="text-xs text-slate-500 font-bold">{row.cursoNombre}</span>
     },
     {
       key: 'hora',
       header: 'Hora',
-      render: (row: any) => <span className="text-xs text-slate-400 font-bold">{row.hora}</span>
+      render: (row: Payment) => <span className="text-xs text-slate-400 font-bold">{row.hora}</span>
     },
     {
       key: 'montoPagado',
       header: 'Monto',
       align: 'right' as const,
-      render: (row: any) => <span className="font-extrabold text-slate-800">{formatCurrency(row.montoPagado)}</span>
+      render: (row: Payment) => <span className="font-extrabold text-slate-800">{formatCurrency(row.montoPagado)}</span>
     }
   ];
 
@@ -95,33 +96,33 @@ export const CashRegister: React.FC = () => {
     {
       key: 'matricula',
       header: 'Matrícula',
-      render: (row: any) => <span className="font-mono text-xs font-bold text-slate-400">{row.matricula}</span>
+      render: (row: Payment) => <span className="font-mono text-xs font-bold text-slate-400">{row.matricula}</span>
     },
     {
       key: 'estudianteNombre',
       header: 'Estudiante',
-      render: (row: any) => <span className="font-bold text-slate-800">{row.estudianteNombre}</span>
+      render: (row: Payment) => <span className="font-bold text-slate-800">{row.estudianteNombre}</span>
     },
     {
       key: 'cursoNombre',
       header: 'Curso',
-      render: (row: any) => <span className="text-xs text-slate-500 font-bold">{row.cursoNombre}</span>
+      render: (row: Payment) => <span className="text-xs text-slate-500 font-bold">{row.cursoNombre}</span>
     },
     {
       key: 'referenciaTransferencia',
       header: 'Referencia Banco',
-      render: (row: any) => <span className="font-mono text-xs font-extrabold text-slate-400">{row.referenciaTransferencia || 'N/A'}</span>
+      render: (row: Payment) => <span className="font-mono text-xs font-extrabold text-slate-400">{row.referenciaTransferencia || 'N/A'}</span>
     },
     {
       key: 'hora',
       header: 'Hora',
-      render: (row: any) => <span className="text-xs text-slate-400 font-bold">{row.hora}</span>
+      render: (row: Payment) => <span className="text-xs text-slate-400 font-bold">{row.hora}</span>
     },
     {
       key: 'montoPagado',
       header: 'Monto',
       align: 'right' as const,
-      render: (row: any) => <span className="font-extrabold text-slate-800">{formatCurrency(row.montoPagado)}</span>
+      render: (row: Payment) => <span className="font-extrabold text-slate-800">{formatCurrency(row.montoPagado)}</span>
     }
   ];
 
@@ -155,7 +156,7 @@ export const CashRegister: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {viewingClosureDetail.pagos.map((payment: any) => (
+              {viewingClosureDetail.pagos.map((payment: Payment) => (
                 <tr key={payment.id} className="border-b border-slate-200">
                   <td className="py-2 font-mono">{payment.matricula}</td>
                   <td className="py-2 font-bold">{payment.estudianteNombre}</td>

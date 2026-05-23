@@ -7,11 +7,12 @@ import { Modal } from '../components/ui/Modal';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { Plus, Edit, Trash2, ShieldAlert, Phone, BookOpen, MapPin, User, Award } from 'lucide-react';
+import type { Teacher } from '../types';
 
 export const Teachers: React.FC = () => {
   const { teachers, courses, addTeacher, updateTeacher, deleteTeacher } = useAcademyStore();
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingTeacher, setEditingTeacher] = useState<any>(null);
+  const [editingTeacher, setEditingTeacher] = useState<Teacher | null>(null);
 
   // Form states
   const [nombreCompleto, setNombreCompleto] = useState('');
@@ -34,7 +35,7 @@ export const Teachers: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const openEditModal = (teacher: any) => {
+  const openEditModal = (teacher: Teacher) => {
     setEditingTeacher(teacher);
     setNombreCompleto(teacher.nombreCompleto);
     setTelefono(teacher.telefono);

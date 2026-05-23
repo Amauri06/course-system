@@ -20,7 +20,7 @@ import {
 import { formatCurrency, inputValue, getIntervalDays, getTotalCourseCost, formatCedula, formatPhone } from '../utils/formatters';
 import { z } from 'zod';
 import { differenceInYears } from 'date-fns';
-import type { Course, Student } from '../types';
+import type { Course, Student, Payment } from '../types';
 
 const getEnrollSchema = (courses: Course[], edadMinimaNormal = 13, edadMinimaIngles = 10) => {
   return z.object({
@@ -153,7 +153,7 @@ export const Enroll: React.FC = () => {
   const [inscripcionMetodoPago, setInscripcionMetodoPago] = useState<'efectivo' | 'transferencia'>('efectivo');
 
   const [enrolledStudent, setEnrolledStudent] = useState<Student | null>(null);
-  const [enrolledPayment, setEnrolledPayment] = useState<Record<string, any> | null>(null);
+  const [enrolledPayment, setEnrolledPayment] = useState<Payment | null>(null);
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [printMode, setPrintMode] = useState<'ticket' | 'fullpage'>('fullpage');
   const [error, setError] = useState('');
@@ -254,8 +254,8 @@ export const Enroll: React.FC = () => {
       setIsConfirmModalOpen(true);
       setTimeout(() => window.print(), 500);
       resetForm();
-    } catch (err: any) {
-      setError(err.message || 'Ocurrió un error al inscribir.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Ocurrió un error al inscribir.');
     }
   };
 
@@ -766,7 +766,7 @@ export const Enroll: React.FC = () => {
 
       {/* Modal de Confirmación de Inscripción */}
       {enrolledStudent && (() => {
-        const courseData = enrolledStudent.cursoSnapshot ?? courses.find((c) => c.id === enrolledStudent.cursoId);
+        const courseData: { nombre: string; costo: number; modulos?: number } | undefined = enrolledStudent.cursoSnapshot ?? courses.find((c) => c.id === enrolledStudent.cursoId);
         return (
           <Modal
             isOpen={isConfirmModalOpen}
@@ -814,7 +814,7 @@ export const Enroll: React.FC = () => {
 
                     <div className="flex justify-between mt-1">
                       <span className="text-slate-500">Curso Inscrito:</span>
-                      <span className="text-slate-800 font-bold text-right">{(courseData as any)?.nombre || 'N/A'}</span>
+                      <span className="text-slate-800 font-bold text-right">{courseData?.nombre || 'N/A'}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-500">Horario Asignado:</span>
@@ -860,7 +860,7 @@ export const Enroll: React.FC = () => {
                       <div className="flex flex-col">
                         <span className="uppercase text-[10px] font-black tracking-widest text-slate-300">Mensualidades (pendiente en Cobros)</span>
                         {courseData && (
-                          <span className="text-[9px] text-slate-400 font-semibold mt-0.5">{formatCurrency((courseData as any).costo)} × {(courseData as any).modulos} módulos</span>
+                          <span className="text-[9px] text-slate-400 font-semibold mt-0.5">{formatCurrency(courseData.costo)} × {courseData.modulos} módulos</span>
                         )}
                       </div>
                       <span className={printMode === 'ticket' ? 'text-lg font-black text-white' : 'text-xl font-black text-white'}>{formatCurrency(enrolledStudent.balancePendiente)}</span>

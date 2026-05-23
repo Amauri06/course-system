@@ -23,20 +23,11 @@ import {
   ArrowRight
 } from 'lucide-react';
 import html2pdf from 'html2pdf.js';
-import { formatCurrency, inputValue } from '../utils/formatters';
+import { formatCurrency, inputValue, getTotalCourseCost } from '../utils/formatters';
 import type { Student, Payment } from '../types';
 
 // ==========================================
-// Helper functions for payment tracking
 // ==========================================
-const getIntervalDays = (frecuencia: string): number => {
-  switch (frecuencia) {
-    case 'semanal': return 7;
-    case 'quincenal': return 15;
-    case 'mensual': return 30;
-    default: return 15;
-  }
-};
 
 const getFrecuenciaLabel = (f: string) => {
   if (f === 'semanal') return 'Semanal';
@@ -45,19 +36,9 @@ const getFrecuenciaLabel = (f: string) => {
   return 'Único';
 };
 
-const getDefaultPaymentAmount = (course: any): number => {
+const getDefaultPaymentAmount = (course: { costo: number } | null | undefined): number => {
   if (!course) return 250;
   return course.costo;
-};
-
-const getTotalCourseCost = (course: any): number => {
-  if (!course) return 0;
-  if (course.frecuenciaPago === 'unico') return course.costo;
-  const intervalDays = getIntervalDays(course.frecuenciaPago);
-  const monthsPerModule = course.duracionModuloMeses || 1;
-  const totalMonths = monthsPerModule * course.modulos;
-  const totalPeriods = (totalMonths * 30) / intervalDays;
-  return course.costo * totalPeriods;
 };
 
 const getNextDueDate = (): Date => {
@@ -117,7 +98,7 @@ const getExpectedPayments = (enrollmentISO: string, frecuencia: string): number 
 const getStudentStatus = (
   student: Student,
   payments: Payment[],
-  course: any
+  course: { frecuenciaPago: string; costo: number } | null | undefined
 ): { label: string; variant: 'success' | 'danger' | 'info' } => {
   if (student.balancePendiente === 0) return { label: 'Pagado', variant: 'success' };
   if (!course) return { label: 'Sin curso', variant: 'info' };
@@ -146,7 +127,7 @@ export const Payments: React.FC = () => {
   const [montoRecibido, setMontoRecibido] = useState(0);
   const [metodoPago, setMetodoPago] = useState<'efectivo' | 'transferencia'>('efectivo');
 
-  const [generatedInvoice, setGeneratedInvoice] = useState<any>(null);
+  const [generatedInvoice, setGeneratedInvoice] = useState<Payment | null>(null);
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
   const [printMode, setPrintMode] = useState<'ticket' | 'fullpage'>(() => {
     const state = useAcademyStore.getState();
@@ -255,8 +236,8 @@ export const Payments: React.FC = () => {
       setMontoPagado(defaultAmount);
       setMontoRecibido(defaultAmount);
       setMetodoPago('efectivo');
-    } catch (err: any) {
-      setError(err.message || 'Ocurrió un error al registrar el pago.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Ocurrió un error al registrar el pago.');
     }
   };
 
@@ -281,8 +262,8 @@ export const Payments: React.FC = () => {
       setCancelTargetPayment(null);
       setCancelMotivo('');
       setIsInvoiceModalOpen(true);
-    } catch (err: any) {
-      setCancelError(err.message || 'Error al anular el pago.');
+    } catch (err) {
+      setCancelError(err instanceof Error ? err.message : 'Error al anular el pago.');
     }
   };
 
@@ -436,7 +417,7 @@ export const Payments: React.FC = () => {
                         <div className="text-[10px] font-semibold text-slate-400 flex items-center gap-2">
                           <span>{s.matricula}</span>
                           <span>•</span>
-                          <span>{(courseData as any)?.nombre || 'N/A'}</span>
+                          <span>{courseData?.nombre || 'N/A'}</span>
                         </div>
                       </div>
                       <div className="text-right shrink-0 flex flex-col items-end gap-1">
@@ -900,7 +881,7 @@ export const Payments: React.FC = () => {
                   {(generatedInvoice.vuelta ?? 0) > 0 && (
                     <div className="flex justify-between items-center">
                       <span className="text-slate-500 font-bold">Vuelta</span>
-                      <span className="text-amber-600 font-extrabold">{formatCurrency(generatedInvoice.vuelta)}</span>
+                      <span className="text-amber-600 font-extrabold">{formatCurrency(generatedInvoice.vuelta ?? 0)}</span>
                     </div>
                   )}
 
