@@ -20,7 +20,9 @@ import {
   TrendingDown,
   Receipt,
   Hash,
-  ArrowRight
+  ArrowRight,
+  XCircle,
+  AlertTriangle
 } from 'lucide-react';
 import html2pdf from 'html2pdf.js';
 import { formatCurrency, inputValue } from '../utils/formatters';
@@ -125,7 +127,7 @@ const getStudentStatus = (
   if (expected === 0) return { label: 'Recién inscrito', variant: 'info' };
   const totalPaid = payments
     .filter(p => p.estudianteId === student.id)
-    .reduce((sum, p) => sum + p.montoPagado, 0);
+    .reduce((sum, p) => sum + (p.esAnulacion ? -p.montoPagado : p.montoPagado), 0);
   const amountPerPeriod = getDefaultPaymentAmount(course);
   const expectedMin = expected * amountPerPeriod;
   if (totalPaid >= expectedMin) return { label: 'Al día', variant: 'success' };
@@ -135,7 +137,7 @@ const getStudentStatus = (
 };
 
 export const Payments: React.FC = () => {
-  const { students, courses, payments, registerPayment } = useAcademyStore();
+  const { students, courses, payments, registerPayment, anularPago } = useAcademyStore();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
@@ -151,6 +153,12 @@ export const Payments: React.FC = () => {
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
   const [printMode, setPrintMode] = useState<'ticket' | 'fullpage'>('fullpage');
   const [error, setError] = useState('');
+
+  // Estado para anulación de pagos
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [cancelTargetPayment, setCancelTargetPayment] = useState<Payment | null>(null);
+  const [cancelMotivo, setCancelMotivo] = useState('');
+  const [cancelError, setCancelError] = useState('');
 
   const filteredStudents = students.filter((s) => {
     if (!searchTerm) return true;
@@ -177,7 +185,7 @@ export const Payments: React.FC = () => {
         .sort((a, b) => new Date(b.fecha + ' ' + b.hora).getTime() - new Date(a.fecha + ' ' + a.hora).getTime())
     : [];
 
-  const totalPaid = studentPayments.reduce((sum, p) => sum + p.montoPagado, 0);
+  const totalPaid = studentPayments.reduce((sum, p) => sum + (p.esAnulacion ? -p.montoPagado : p.montoPagado), 0);
   const totalCourseCost = getTotalCourseCost(selectedCourse);
   const progressPct = totalCourseCost > 0 ? Math.min(100, Math.round((totalPaid / totalCourseCost) * 100)) : 0;
 
@@ -237,10 +245,12 @@ export const Payments: React.FC = () => {
         selectedStudent.id,
         montoPagado,
         metodoPago,
-        referenciaTransferencia || undefined
+        referenciaTransferencia || undefined,
+        montoRecibido,
+        montoRecibido - montoPagado
       );
 
-      setGeneratedInvoice({ ...invoice, montoRecibido, vuelta: montoRecibido - montoPagado });
+      setGeneratedInvoice(invoice);
       setIsInvoiceModalOpen(true);
       setTimeout(() => window.print(), 500);
       setSearchTerm('');
@@ -252,6 +262,32 @@ export const Payments: React.FC = () => {
       setReferenciaTransferencia('');
     } catch (err: any) {
       setError(err.message || 'Ocurrió un error al registrar el pago.');
+    }
+  };
+
+  const openCancelModal = (payment: Payment) => {
+    setCancelTargetPayment(payment);
+    setCancelMotivo('');
+    setCancelError('');
+    setIsCancelModalOpen(true);
+  };
+
+  const handleConfirmCancel = () => {
+    if (!cancelTargetPayment) return;
+    if (!cancelMotivo.trim()) {
+      setCancelError('Debe indicar el motivo de la anulación');
+      return;
+    }
+    try {
+      const anulacion = anularPago(cancelTargetPayment.id, cancelMotivo.trim());
+      setGeneratedInvoice(anulacion);
+      setCancelError('');
+      setIsCancelModalOpen(false);
+      setCancelTargetPayment(null);
+      setCancelMotivo('');
+      setIsInvoiceModalOpen(true);
+    } catch (err: any) {
+      setCancelError(err.message || 'Error al anular el pago.');
     }
   };
 
@@ -522,32 +558,88 @@ export const Payments: React.FC = () => {
                         <th className="pb-3 pr-4">Método</th>
                         <th className="pb-3 pr-4">Referencia</th>
                         <th className="pb-3 pr-4 text-right">Monto</th>
-                        <th className="pb-3 text-right">Balance</th>
+                        <th className="pb-3 pr-4 text-right">Balance</th>
+                        <th className="pb-3 text-right">Imprimir</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
                       {studentPayments.map((p) => (
-                        <tr key={p.id} className="text-xs text-slate-600 font-semibold hover:bg-slate-50/50 transition-colors">
+                        <tr
+                          key={p.id}
+                          className={`text-xs font-semibold transition-colors ${
+                            p.esAnulacion
+                              ? 'text-red-400 bg-red-50/40'
+                              : 'text-slate-600 hover:bg-slate-50/50'
+                          }`}
+                        >
                           <td className="py-3 pr-4">
-                            <span className="font-mono font-bold text-slate-800">{p.id}</span>
+                            <div className="flex items-center gap-2">
+                              <span className={`font-mono font-bold ${p.esAnulacion ? 'text-red-400 line-through' : 'text-slate-800'}`}>
+                                {p.id}
+                              </span>
+                              {p.esAnulacion && (
+                                <Badge variant="danger" size="sm">ANULADO</Badge>
+                              )}
+                              {p.pagoOriginalId && (
+                                <span className="text-[9px] text-red-300 font-medium">
+                                  → {p.pagoOriginalId}
+                                </span>
+                              )}
+                            </div>
                           </td>
-                          <td className="py-3 pr-4 text-slate-500">
+                          <td className={`py-3 pr-4 ${p.esAnulacion ? 'text-red-300' : 'text-slate-500'}`}>
                             {p.fecha} <span className="text-slate-400">{p.hora}</span>
-                            <span className="block text-[10px] font-medium text-brand-500">{getPeriodLabel(p.fecha, selectedCourse?.frecuenciaPago)}</span>
+                            {!p.esAnulacion && (
+                              <span className="block text-[10px] font-medium text-brand-500">
+                                {getPeriodLabel(p.fecha, selectedCourse?.frecuenciaPago)}
+                              </span>
+                            )}
+                            {p.esAnulacion && p.motivoAnulacion && (
+                              <span className="block text-[10px] font-medium text-red-400 italic mt-0.5">
+                                {p.motivoAnulacion}
+                              </span>
+                            )}
                           </td>
                           <td className="py-3 pr-4">
-                            <Badge variant={p.metodoPago === 'efectivo' ? 'success' : 'info'} size="sm">
+                            <Badge
+                              variant={p.esAnulacion ? 'danger' : p.metodoPago === 'efectivo' ? 'success' : 'info'}
+                              size="sm"
+                            >
                               {p.metodoPago}
                             </Badge>
                           </td>
                           <td className="py-3 pr-4 font-mono text-slate-400">
                             {p.referenciaTransferencia || '—'}
                           </td>
-                          <td className="py-3 pr-4 text-right font-extrabold text-emerald-600">
-                            +{formatCurrency(p.montoPagado)}
+                          <td className={`py-3 pr-4 text-right font-extrabold ${p.esAnulacion ? 'text-red-400 line-through' : 'text-emerald-600'}`}>
+                            {p.esAnulacion ? '-' : '+'}{formatCurrency(p.montoPagado)}
                           </td>
-                          <td className="py-3 text-right font-extrabold text-slate-800">
+                          <td className={`py-3 pr-4 text-right font-extrabold ${p.esAnulacion ? 'text-red-300' : 'text-slate-800'}`}>
                             {formatCurrency(p.balance)}
+                          </td>
+                          <td className="py-3 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                onClick={() => {
+                                  setGeneratedInvoice(p);
+                                  setIsInvoiceModalOpen(true);
+                                  setTimeout(() => window.print(), 500);
+                                }}
+                                className="p-1.5 rounded-lg text-slate-300 hover:text-brand-600 hover:bg-brand-50 transition-all"
+                                title="Reimprimir recibo"
+                              >
+                                <Printer className="w-4 h-4" />
+                              </button>
+                              {!p.esAnulacion && (
+                                <button
+                                  onClick={() => openCancelModal(p)}
+                                  className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all"
+                                  title="Anular pago"
+                                >
+                                  <XCircle className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -949,6 +1041,108 @@ export const Payments: React.FC = () => {
           </div>
         </Modal>
       )}
+
+      {/* Modal de Anulación de Pago */}
+      <Modal isOpen={isCancelModalOpen} onClose={() => { setIsCancelModalOpen(false); setCancelError(''); }} title="Anular Pago" size="md">
+        <div className="p-1">
+          {/* Header */}
+          <div className="flex items-center gap-4 pb-5 border-b border-slate-100">
+            <div className="p-3 rounded-2xl bg-gradient-to-br from-rose-500 to-rose-600 shadow-lg shadow-rose-200">
+              <XCircle className="w-6 h-6 text-white" />
+            </div>
+            <div className="flex-1">
+              <p className="text-xs font-semibold text-slate-400">
+                Esta acción generará un contra-recibo y restaurará el balance del estudiante
+              </p>
+            </div>
+          </div>
+
+          {/* Payment Info */}
+          {cancelTargetPayment && (
+            <div className="mt-5 p-4 rounded-xl bg-slate-50 border border-slate-100 space-y-2.5">
+              <div className="flex justify-between items-center">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Recibo</span>
+                <span className="text-sm font-black font-mono text-slate-800">{cancelTargetPayment.id}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Estudiante</span>
+                <span className="text-sm font-bold text-slate-700">{cancelTargetPayment.estudianteNombre}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Monto</span>
+                <span className="text-sm font-extrabold text-emerald-600">+{formatCurrency(cancelTargetPayment.montoPagado)}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Método</span>
+                <Badge variant={cancelTargetPayment.metodoPago === 'efectivo' ? 'success' : 'info'} size="sm">
+                  {cancelTargetPayment.metodoPago}
+                </Badge>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Fecha</span>
+                <span className="text-sm font-semibold text-slate-600">{cancelTargetPayment.fecha} {cancelTargetPayment.hora}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Motivo */}
+          <div className="mt-5">
+            <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+              Motivo de Anulación <span className="text-rose-500">*</span>
+            </label>
+            <textarea
+              value={cancelMotivo}
+              onChange={(e) => { setCancelMotivo(e.target.value); setCancelError(''); }}
+              placeholder="Ej: El cliente decidió no realizar el pago, error en el monto, duplicidad..."
+              className={`w-full px-4 py-3 rounded-xl text-sm font-semibold text-slate-700 placeholder:text-slate-300 border-2 transition-all duration-200 outline-none resize-none h-24 ${
+                cancelError
+                  ? 'border-rose-300 bg-rose-50/50 focus:border-rose-400'
+                  : 'border-slate-200 bg-white focus:border-brand-400'
+              }`}
+            />
+            {cancelError && (
+              <p className="mt-1.5 text-xs font-bold text-rose-500 flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                {cancelError}
+              </p>
+            )}
+          </div>
+
+          {/* Warning */}
+          <div className="mt-5 p-3.5 rounded-xl bg-amber-50 border border-amber-100 flex items-start gap-3">
+            <div className="p-1.5 rounded-lg bg-amber-100/80 shrink-0 mt-0.5">
+              <AlertTriangle className="w-4 h-4 text-amber-600" />
+            </div>
+            <div className="text-[11px] leading-relaxed">
+              <span className="font-black text-amber-800">IMPORTANTE</span>
+              <p className="text-amber-700 font-semibold mt-0.5">
+                Se generará un contra-recibo (<span className="font-mono">CON-XXXX</span>) como respaldo. 
+                El balance del estudiante será restaurado y el monto se descontará del cierre de caja del día de hoy.
+                Esta operación no se puede deshacer.
+              </p>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center gap-3 mt-6 pt-5 border-t border-slate-100">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => { setIsCancelModalOpen(false); setCancelError(''); }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="danger"
+              className="flex-1"
+              icon={<XCircle className="w-4 h-4" />}
+              onClick={handleConfirmCancel}
+            >
+              Anular Pago
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

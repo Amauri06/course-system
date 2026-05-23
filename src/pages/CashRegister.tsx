@@ -12,16 +12,20 @@ import {
   Printer,
   Calendar,
   Lock,
-  History
+  History,
+  PenLine,
+  Check
 } from 'lucide-react';
 import { formatCurrency, formatDateStr } from '../utils/formatters';
 import { format } from 'date-fns';
 
 export const CashRegister: React.FC = () => {
-  const { closures, closeActiveClosure, reopenClosure, checkOrCreateDailyClosure } = useAcademyStore();
+  const { closures, closeActiveClosure, reopenClosure, checkOrCreateDailyClosure, updateSaldoInicial } = useAcademyStore();
   const [activeTab, setActiveTab] = useState<'today' | 'history'>('today');
   const [selectedHistoryDate, setSelectedHistoryDate] = useState('');
   const [viewingClosureDetail, setViewingClosureDetail] = useState<any>(null);
+  const [editingSaldo, setEditingSaldo] = useState(false);
+  const [saldoInput, setSaldoInput] = useState(0);
 
   const todayDateStr = format(new Date(), 'yyyy-MM-dd');
   
@@ -125,7 +129,7 @@ export const CashRegister: React.FC = () => {
     <div className="flex flex-col gap-8 animate-fade-in">
       {/* Printable Area - Past Closure details */}
       {viewingClosureDetail && (
-        <div className="hidden print-only text-center mb-6">
+        <div id="closure-printable" className="text-center">
           <h2 className="text-xl font-bold uppercase tracking-wide">Reporte de Cierre de Caja Diario</h2>
           <p className="text-xs font-semibold">Resumen Administrativo y Fiscal</p>
           <div className="border-b border-slate-400 my-4" />
@@ -270,16 +274,63 @@ export const CashRegister: React.FC = () => {
 
             {/* Total Balance general Card */}
             <Card title="Balance General de Caja" className="bg-linear-to-br from-brand-500/5 to-indigo-500/5 border-brand-100">
-              <div className="flex items-center justify-between">
-                <div className="flex flex-col gap-1">
-                  <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Total Recaudado Hoy</span>
-                  <span className="text-2xl font-extrabold text-slate-800 tracking-tight leading-none my-1">
-                    {formatCurrency(todayClosure.totalGeneral)}
-                  </span>
-                  <span className="text-xs text-slate-400 font-bold">{todayClosure.cantidadPagos} Transacciones totales</span>
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Total Recaudado Hoy</span>
+                    <span className="text-2xl font-extrabold text-slate-800 tracking-tight leading-none my-1">
+                      {formatCurrency(todayClosure.totalGeneral)}
+                    </span>
+                    <span className="text-xs text-slate-400 font-bold">{todayClosure.cantidadPagos} Transacciones totales</span>
+                  </div>
+                  <div className="p-3.5 bg-brand-50 text-brand-600 border border-brand-100 rounded-xl">
+                    <PiggyBank className="w-5.5 h-5.5" />
+                  </div>
                 </div>
-                <div className="p-3.5 bg-brand-50 text-brand-600 border border-brand-100 rounded-xl">
-                  <PiggyBank className="w-5.5 h-5.5" />
+                <div className="border-t border-brand-100 pt-3 mt-1 flex items-center justify-between">
+                  <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Fondo Inicial</span>
+                  <div className="flex items-center gap-2">
+                    {editingSaldo ? (
+                      <>
+                        <input
+                          type="number"
+                          value={saldoInput}
+                          onChange={(e) => setSaldoInput(Number(e.target.value))}
+                          className="w-24 px-2 py-1 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-800 text-right focus:outline-hidden focus:ring-2 focus:ring-amber-200 focus:border-amber-400"
+                          autoFocus
+                        />
+                        <button
+                          onClick={() => {
+                            updateSaldoInicial(todayDateStr, saldoInput);
+                            setEditingSaldo(false);
+                          }}
+                          className="p-1 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors cursor-pointer"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-sm font-bold text-slate-600">+ {formatCurrency(todayClosure.saldoInicial ?? 0)}</span>
+                        {!todayClosure.cerrado && (
+                          <button
+                            onClick={() => {
+                              setSaldoInput(todayClosure.saldoInicial ?? 0);
+                              setEditingSaldo(true);
+                            }}
+                            className="p-1 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                            title="Editar fondo inicial"
+                          >
+                            <PenLine className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between pt-1">
+                  <span className="text-xs font-extrabold text-slate-700 uppercase tracking-widest">Total en Caja</span>
+                  <span className="text-lg font-black text-slate-800">{formatCurrency((todayClosure.saldoInicial ?? 0) + todayClosure.totalGeneral)}</span>
                 </div>
               </div>
             </Card>

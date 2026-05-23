@@ -68,6 +68,11 @@ body {
   color: #1e293b;
 }
 
+/* Hidden in screen, visible in print with full positioning */
+#closure-printable {
+  display: none;
+}
+
 /* Custom Print Styles */
 @media print {
   html, body {
@@ -93,6 +98,24 @@ body {
     width: 100% !important;
     margin: 0 !important;
     padding: 0 !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  #closure-printable, #closure-printable * {
+    visibility: visible;
+  }
+
+  #closure-printable {
+    display: block !important;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 1.5cm !important;
   }
 
   .no-print {

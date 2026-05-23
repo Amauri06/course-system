@@ -61,11 +61,17 @@ export interface Payment {
   hora: string;  // HH:MM
   horario?: string;
   costoInscripcion?: number;
+  montoRecibido?: number;
+  vuelta?: number;
+  esAnulacion?: boolean;
+  pagoOriginalId?: string;
+  motivoAnulacion?: string;
 }
 
 export interface CashClosure {
-  id: string; // ID único (generalmente fecha YYYY-MM-DD o timestamp)
-  fecha: string; // YYYY-MM-DD
+  id: string;
+  fecha: string;
+  saldoInicial: number;
   totalEfectivo: number;
   totalTransferencia: number;
   totalGeneral: number;

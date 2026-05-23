@@ -49,13 +49,19 @@ interface AcademyState {
     studentId: string,
     montoPagado: number,
     metodoPago: 'efectivo' | 'transferencia',
-    referenciaTransferencia?: string
+    referenciaTransferencia?: string,
+    montoRecibido?: number,
+    vuelta?: number
   ) => Payment;
+
+  // Anulación de Pagos (Contra-Recibo)
+  anularPago: (pagoOriginalId: string, motivo: string) => Payment;
 
   // Cierre de Caja Actions
   checkOrCreateDailyClosure: () => void;
   closeActiveClosure: () => void;
   reopenClosure: () => void;
+  updateSaldoInicial: (fecha: string, monto: number) => void;
   
   // Configuración del Adaptador
   changePersistenceAdapter: (type: 'localStorage' | 'supabase') => void;
@@ -259,7 +265,9 @@ export const useAcademyStore = create<AcademyState>()(
             fecha: hoy,
             hora,
             horario: studentData.horario,
-            costoInscripcion: studentData.costoInscripcion
+            costoInscripcion: studentData.costoInscripcion,
+            montoRecibido: paymentData.montoRecibido,
+            vuelta: paymentData.montoRecibido - studentData.costoInscripcion
           };
 
           // Actualizar cierre de caja
@@ -295,7 +303,7 @@ export const useAcademyStore = create<AcademyState>()(
       // ==========================================
       // SISTEMA DE ABONOS (PAGOS A ESTUDIANTES EXISTENTES)
       // ==========================================
-      registerPayment: (studentId, montoPagado, metodoPago, referenciaTransferencia) => {
+      registerPayment: (studentId, montoPagado, metodoPago, referenciaTransferencia, montoRecibido, vuelta) => {
         get().checkOrCreateDailyClosure();
 
         const state = get();
@@ -333,7 +341,9 @@ export const useAcademyStore = create<AcademyState>()(
           fecha: getTodayDateStr(),
           hora: getCurrentTimeStr(),
           horario: student.horario,
-          costoInscripcion: 0
+          costoInscripcion: 0,
+          montoRecibido,
+          vuelta
         };
 
         // 2. Actualizar balance del estudiante
@@ -369,6 +379,82 @@ export const useAcademyStore = create<AcademyState>()(
       },
 
       // ==========================================
+      // ANULACIÓN DE PAGOS (CONTRA-RECIBO)
+      // ==========================================
+      anularPago: (pagoOriginalId, motivo) => {
+        const state = get();
+        const pagoOriginal = state.payments.find((p) => p.id === pagoOriginalId);
+        if (!pagoOriginal) throw new Error('Pago original no encontrado');
+        if (pagoOriginal.esAnulacion) throw new Error('No se puede anular una anulación');
+
+        const student = state.students.find((s) => s.id === pagoOriginal.estudianteId);
+        if (!student) throw new Error('Estudiante no encontrado');
+
+        // Validar que la caja de hoy esté abierta
+        const todayClosure = state.closures.find((c) => c.fecha === getTodayDateStr());
+        if (todayClosure && todayClosure.cerrado) {
+          throw new Error(
+            'La caja del día de hoy ya está cerrada. Debe reabrirla desde Cierre de Caja antes de anular pagos.'
+          );
+        }
+
+        const invoiceCount = state.payments.length + 1;
+        const invoiceId = `CON-${1000 + invoiceCount}`;
+        const nuevoBalance = student.balancePendiente + pagoOriginal.montoPagado;
+
+        const anulacion: Payment = {
+          id: invoiceId,
+          matricula: pagoOriginal.matricula,
+          estudianteId: pagoOriginal.estudianteId,
+          estudianteNombre: pagoOriginal.estudianteNombre,
+          cursoId: pagoOriginal.cursoId,
+          cursoNombre: pagoOriginal.cursoNombre,
+          montoPagado: pagoOriginal.montoPagado,
+          balance: nuevoBalance,
+          metodoPago: pagoOriginal.metodoPago,
+          fecha: getTodayDateStr(),
+          hora: getCurrentTimeStr(),
+          horario: pagoOriginal.horario,
+          costoInscripcion: 0,
+          montoRecibido: pagoOriginal.montoRecibido,
+          vuelta: pagoOriginal.vuelta,
+          esAnulacion: true,
+          pagoOriginalId,
+          motivoAnulacion: motivo,
+        };
+
+        // Restaurar balance del estudiante
+        const updatedStudents = state.students.map((s) =>
+          s.id === pagoOriginal.estudianteId ? { ...s, balancePendiente: nuevoBalance } : s
+        );
+
+        // Actualizar cierre de caja (restar el monto)
+        const todayDate = getTodayDateStr();
+        const updatedClosures = state.closures.map((closure) => {
+          if (closure.fecha === todayDate && !closure.cerrado) {
+            const isEfectivo = pagoOriginal.metodoPago === 'efectivo';
+            return {
+              ...closure,
+              totalEfectivo: closure.totalEfectivo - (isEfectivo ? pagoOriginal.montoPagado : 0),
+              totalTransferencia: closure.totalTransferencia - (!isEfectivo ? pagoOriginal.montoPagado : 0),
+              totalGeneral: closure.totalGeneral - pagoOriginal.montoPagado,
+              cantidadPagos: closure.cantidadPagos + 1,
+              pagos: [...closure.pagos, anulacion],
+            };
+          }
+          return closure;
+        });
+
+        set({
+          students: updatedStudents,
+          payments: [...state.payments, anulacion],
+          closures: updatedClosures,
+        });
+
+        return anulacion;
+      },
+
+      // ==========================================
       // CIERRE DE CAJA DIARIO (CASH CLOSURE)
       // ==========================================
       checkOrCreateDailyClosure: () => {
@@ -384,6 +470,7 @@ export const useAcademyStore = create<AcademyState>()(
           const newClosure: CashClosure = {
             id: `closure-${todayDate}`,
             fecha: todayDate,
+            saldoInicial: 0,
             totalEfectivo: 0,
             totalTransferencia: 0,
             totalGeneral: 0,
@@ -428,6 +515,14 @@ export const useAcademyStore = create<AcademyState>()(
             }
             return closure;
           })
+        }));
+      },
+
+      updateSaldoInicial: (fecha, monto) => {
+        set((state) => ({
+          closures: state.closures.map((closure) =>
+            closure.fecha === fecha ? { ...closure, saldoInicial: monto } : closure
+          )
         }));
       }
     }),
