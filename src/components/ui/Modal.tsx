@@ -38,10 +38,9 @@ export const Modal: React.FC<ModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs transition-opacity animate-fade-in print:bg-transparent print:backdrop-blur-none">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs transition-opacity animate-fade-in print:bg-transparent print:backdrop-blur-none print:static print:inset-auto print:p-0">
       {/* Backdrop */}
       <div className="absolute inset-0 cursor-default no-print" onClick={onClose} />
-
       {/* Modal Container */}
       <div className={`relative w-full ${sizes[size]} bg-white rounded-2xl shadow-xl border border-slate-100 flex flex-col max-h-[90vh] overflow-hidden print:overflow-visible print:max-h-none print:static transform scale-100 animate-slide-up`}>
         {/* Header */}

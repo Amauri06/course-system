@@ -1,19 +1,24 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAcademyStore } from '../store/academyStore';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
+import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
 import {
-  CreditCard,
   User,
   GraduationCap,
   ShieldCheck,
   Printer,
-  Search
+  Search,
+  CheckCircle2,
+  Wallet,
+  Coins,
+  Hash
 } from 'lucide-react';
-import { formatCurrency } from '../utils/formatters';
+import { formatCurrency, inputValue, getIntervalDays, getTotalCourseCost } from '../utils/formatters';
 import { z } from 'zod';
 import { differenceInYears } from 'date-fns';
 import type { Course, Student } from '../types';
@@ -104,14 +109,17 @@ const getEnrollSchema = (courses: Course[]) => {
 };
 
 export const Enroll: React.FC = () => {
+  const navigate = useNavigate();
   const { courses, students, enrollStudent } = useAcademyStore();
 
+  const [step, setStep] = useState<'form' | 'review'>('form');
   const [isNewStudent, setIsNewStudent] = useState(true);
   const [existingStudentId, setExistingStudentId] = useState('');
   const [studentSearchTerm, setStudentSearchTerm] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   const [horario, setHorario] = useState('');
+  const [inscripcionGratis, setInscripcionGratis] = useState(false);
 
   const filteredExistingStudents = students.filter(s => {
     if (!studentSearchTerm) return true;
@@ -127,14 +135,19 @@ export const Enroll: React.FC = () => {
 
   const [cursoId, setCursoId] = useState('');
 
+  const [montoInscripcion, setMontoInscripcion] = useState(0);
+  const [montoRecibido, setMontoRecibido] = useState(0);
+  const [inscripcionMetodoPago, setInscripcionMetodoPago] = useState<'efectivo' | 'transferencia'>('efectivo');
+  const [inscripcionReferencia, setInscripcionReferencia] = useState('');
+
   const [enrolledStudent, setEnrolledStudent] = useState<Student | null>(null);
+  const [enrolledPayment, setEnrolledPayment] = useState<Record<string, any> | null>(null);
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [printMode, setPrintMode] = useState<'ticket' | 'fullpage'>('fullpage');
   const [error, setError] = useState('');
 
-  const selectedCourseCost = cursoId
-    ? courses.find((c) => c.id === cursoId)?.costo ?? 0
-    : 0;
+  const selectedCourse = cursoId ? courses.find((c) => c.id === cursoId) : null;
+  const vuelta = Math.max(0, montoRecibido - montoInscripcion);
 
   useEffect(() => {
     if (!isNewStudent && existingStudentId) {
@@ -151,6 +164,8 @@ export const Enroll: React.FC = () => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    if (step === 'review') return;
 
     const validationResult = getEnrollSchema(courses).safeParse({
       isNewStudent,
@@ -169,18 +184,57 @@ export const Enroll: React.FC = () => {
       return;
     }
 
-    try {
-      const student = enrollStudent({
-        nombreCompleto,
-        telefono,
-        cedula,
-        direccion,
-        fechaNacimiento,
-        cursoId,
-        horario,
-      });
+    if (!inscripcionGratis && montoInscripcion <= 0) {
+      setError('Debe ingresar un monto de inscripción o marcar como Gratis.');
+      return;
+    }
 
-      setEnrolledStudent(student);
+    if (!inscripcionGratis && montoInscripcion > 0 && montoRecibido < montoInscripcion) {
+      setError(`El monto recibido (${formatCurrency(montoRecibido)}) no puede ser menor al costo de inscripción (${formatCurrency(montoInscripcion)}).`);
+      return;
+    }
+
+    if (!inscripcionGratis && inscripcionMetodoPago === 'transferencia' && !inscripcionReferencia.trim()) {
+      setError('Debe especificar la referencia de transferencia.');
+      return;
+    }
+
+    setStep('review');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleConfirmEnrollment = () => {
+    setError('');
+
+    try {
+      const result = enrollStudent(
+        {
+          nombreCompleto,
+          telefono,
+          cedula,
+          direccion,
+          fechaNacimiento,
+          cursoId,
+          horario,
+          inscripcionGratis,
+          costoInscripcion: montoInscripcion,
+        },
+        montoInscripcion > 0
+          ? {
+              montoRecibido,
+              metodoPago: inscripcionMetodoPago,
+              referenciaTransferencia: inscripcionReferencia || undefined,
+            }
+          : undefined
+      );
+
+      setEnrolledStudent(result.student);
+      setEnrolledPayment(
+        result.payment
+          ? { ...result.payment, montoRecibido, vuelta: montoRecibido - montoInscripcion }
+          : null
+      );
+      setStep('form');
       setIsConfirmModalOpen(true);
       setTimeout(() => window.print(), 500);
       resetForm();
@@ -201,6 +255,11 @@ export const Enroll: React.FC = () => {
     setDireccion('');
     setCursoId('');
     setHorario('');
+    setInscripcionGratis(false);
+    setMontoInscripcion(0);
+    setMontoRecibido(0);
+    setInscripcionMetodoPago('efectivo');
+    setInscripcionReferencia('');
   };
 
   const handlePrint = () => {
@@ -218,10 +277,358 @@ export const Enroll: React.FC = () => {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 no-print">
-        <div className="xl:col-span-2">
-          <Card title="Formulario de Inscripción">
-            <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+      {step === 'form' ? (
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 no-print">
+          <div className="xl:col-span-2">
+            <Card title="Formulario de Inscripción">
+              <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+                {error && (
+                  <div className="flex items-center gap-2.5 p-3.5 bg-rose-50 border border-rose-100 rounded-xl text-rose-700 text-xs font-semibold">
+                    <ShieldCheck className="w-4.5 h-4.5 text-rose-500 shrink-0" />
+                    <span>{error}</span>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-4 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                  <Button
+                    variant={isNewStudent ? 'primary' : 'outline'}
+                    size="sm"
+                    type="button"
+                    onClick={() => {
+                      setIsNewStudent(true);
+                      setNombreCompleto('');
+                      setTelefono('');
+                      setFechaNacimiento('');
+                      setCedula('');
+                      setDireccion('');
+                    }}
+                  >
+                    Nuevo Estudiante
+                  </Button>
+                  <Button
+                    variant={!isNewStudent ? 'primary' : 'outline'}
+                    size="sm"
+                    type="button"
+                    onClick={() => setIsNewStudent(false)}
+                  >
+                    Estudiante Registrado
+                  </Button>
+                </div>
+
+                {isNewStudent ? (
+                  <div className="flex flex-col gap-4">
+                    <Input
+                      label="Nombre Completo *"
+                      value={nombreCompleto}
+                      onChange={(e) => setNombreCompleto(e.target.value)}
+                      placeholder="Ej: Laura Mercedes Pérez"
+                      icon={<User className="w-4.5 h-4.5" />}
+                      required
+                    />
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <Input
+                        label="Fecha Nacimiento *"
+                        type="date"
+                        value={fechaNacimiento}
+                        onChange={(e) => setFechaNacimiento(e.target.value)}
+                      />
+                      <Input
+                        label="Teléfono *"
+                        value={telefono}
+                        onChange={(e) => setTelefono(e.target.value)}
+                        placeholder="809-555-0123"
+                      />
+                      <Input
+                        label="Cédula"
+                        value={cedula}
+                        onChange={(e) => setCedula(e.target.value)}
+                        placeholder="Opcional < 18 años"
+                      />
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                        Dirección de Residencia
+                      </label>
+                      <textarea
+                        value={direccion}
+                        onChange={(e) => setDireccion(e.target.value)}
+                        placeholder="Dirección física completa (Opcional)..."
+                        className="w-full px-4 py-2.5 bg-white border border-slate-200 focus:ring-brand-100 focus:border-brand-500 rounded-xl text-slate-800 text-sm transition-all duration-200 focus:outline-hidden focus:ring-4 h-16"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-4">
+                    <div className="relative flex flex-col gap-1.5">
+                      <Input
+                        label="Buscar Estudiante (Nombre o Cédula) *"
+                        value={studentSearchTerm}
+                        onChange={(e) => {
+                          setStudentSearchTerm(e.target.value);
+                          setIsDropdownOpen(true);
+                          if (!e.target.value) setExistingStudentId('');
+                        }}
+                        onFocus={() => setIsDropdownOpen(true)}
+                        onBlur={() => setTimeout(() => setIsDropdownOpen(false), 200)}
+                        placeholder="Ej: Laura o 001..."
+                        icon={<Search className="w-4.5 h-4.5 text-slate-400" />}
+                      />
+
+                      {isDropdownOpen && studentSearchTerm && (
+                        <div className="absolute top-[64px] left-0 right-0 z-50 mt-1 max-h-60 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-lg p-1">
+                          {filteredExistingStudents.length > 0 ? (
+                            filteredExistingStudents.map((s) => (
+                              <button
+                                key={s.id}
+                                type="button"
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-brand-50 rounded-lg transition-colors flex flex-col"
+                                onMouseDown={() => {
+                                  setExistingStudentId(s.id);
+                                  setStudentSearchTerm(s.nombreCompleto);
+                                  setIsDropdownOpen(false);
+                                }}
+                              >
+                                <span className="font-bold text-slate-800">{s.nombreCompleto}</span>
+                                <span className="text-[10px] font-semibold text-slate-400">Cédula: {s.cedula || 'N/A'} - Matrícula: {s.matricula}</span>
+                              </button>
+                            ))
+                          ) : (
+                            <div className="px-3 py-4 text-center text-sm text-slate-500 font-semibold">
+                              No se encontraron estudiantes.
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    {existingStudentId && (
+                      <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl flex flex-col gap-2.5 text-xs text-slate-600 font-semibold">
+                        <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Información Sincronizada</span>
+                        <span>Nombre: {nombreCompleto}</span>
+                        <span>Cédula: {cedula}</span>
+                        <span>Teléfono: {telefono}</span>
+                        <span>Dirección: {direccion}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="border-t border-slate-100 pt-6 flex flex-col gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <Select
+                      label="Curso a Inscribir *"
+                      value={cursoId}
+                      onChange={(e) => setCursoId(e.target.value)}
+                      options={[
+                        { value: '', label: 'Seleccionar curso...' },
+                        ...courses
+                          .filter((c) => c.estado === 'activo')
+                          .map((c) => ({ value: c.id, label: `${c.nombre} (${formatCurrency(c.costo)}/mod)` }))
+                      ]}
+                    />
+                    <Select
+                      label="Horario Asignado *"
+                      value={horario}
+                      onChange={(e) => setHorario(e.target.value)}
+                      options={[
+                        { value: '', label: 'Elegir tanda...' },
+                        { value: '9:00 am - 12:00 pm', label: 'Mañana (9:00 am - 12:00 pm)' },
+                        { value: '2:00 pm - 5:00 pm', label: 'Tarde (2:00 pm - 5:00 pm)' }
+                      ]}
+                    />
+                  </div>
+
+                  {selectedCourse && (
+                    <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Deuda Total del Curso</span>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-lg font-black text-slate-800">
+                        {formatCurrency(getTotalCourseCost(selectedCourse))}
+                      </span>
+                      {selectedCourse.frecuenciaPago === 'unico' ? (
+                        <span className="text-[10px] font-semibold text-slate-400">
+                          (pago único)
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-semibold text-slate-400">
+                          ({formatCurrency(selectedCourse.costo)}/{selectedCourse.frecuenciaPago === 'semanal' ? 'sem' : 'mes'} × {Math.round(((selectedCourse.duracionModuloMeses || 1) * selectedCourse.modulos * 30) / getIntervalDays(selectedCourse.frecuenciaPago))} períodos)
+                        </span>
+                      )}
+                    </div>
+                      <p className="text-[10px] font-semibold text-amber-600 mt-1">Esta deuda se cobrará en la sección Cobros</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Costo de Inscripción */}
+                  <div className="border-t border-slate-100 pt-6 flex flex-col gap-4">
+                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Costo de Inscripción</h3>
+
+                    <div className="flex items-end gap-3">
+                      <div className="flex-1">
+                        <Input
+                          label="Monto de Inscripción ($)"
+                          type="number"
+                          value={inputValue(montoInscripcion)}
+                          onChange={(e) => {
+                            const val = Number(e.target.value);
+                            setMontoInscripcion(val);
+                            if (val > 0) setInscripcionGratis(false);
+                          }}
+                          placeholder="0"
+                          icon={<Wallet className="w-4.5 h-4.5" />}
+                          disabled={inscripcionGratis}
+                        />
+                      </div>
+                      <div className="pb-0.5 flex items-center gap-2">
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            className="sr-only peer"
+                            checked={inscripcionGratis}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setInscripcionGratis(checked);
+                              if (checked) {
+                                setMontoInscripcion(0);
+                                setMontoRecibido(0);
+                              }
+                            }}
+                          />
+                          <div className="w-10 h-5.5 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-brand-100 rounded-full peer peer-checked:after:translate-x-[18px] peer-checked:after:border-white after:content-[''] after:absolute after:top-[3px] after:start-[3px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500" />
+                          <span className="ms-2.5 text-xs font-bold text-emerald-600 uppercase tracking-wider">Gratis</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    {!inscripcionGratis && (
+                      <>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <Input
+                            label="Monto Recibido ($)"
+                            type="number"
+                            value={inputValue(montoRecibido)}
+                            onChange={(e) => setMontoRecibido(Number(e.target.value))}
+                            placeholder={montoInscripcion.toString()}
+                            icon={<Coins className="w-4.5 h-4.5" />}
+                          />
+                          <Select
+                            label="Método de Pago"
+                            value={inscripcionMetodoPago}
+                            onChange={(e) => setInscripcionMetodoPago(e.target.value as 'efectivo' | 'transferencia')}
+                            options={[
+                              { value: 'efectivo', label: 'Efectivo' },
+                              { value: 'transferencia', label: 'Transferencia Bancaria' }
+                            ]}
+                          />
+                        </div>
+
+                        {montoRecibido >= montoInscripcion && montoRecibido > 0 && (
+                      <div className={`p-3 rounded-xl flex items-center justify-between ${vuelta > 0 ? 'bg-amber-50 border border-amber-100' : 'bg-emerald-50 border border-emerald-100'}`}>
+                        <span className={`text-xs font-bold ${vuelta > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>
+                          {vuelta > 0 ? 'Vuelta' : 'Pago exacto'}
+                        </span>
+                        <span className={`text-base font-black ${vuelta > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                          {vuelta > 0 ? formatCurrency(vuelta) : '$0'}
+                        </span>
+                      </div>
+                    )}
+
+                    {inscripcionMetodoPago === 'transferencia' && (
+                      <Input
+                        label="Referencia de Transferencia"
+                        value={inscripcionReferencia}
+                        onChange={(e) => setInscripcionReferencia(e.target.value)}
+                        placeholder="Nro. Aprobación / Código"
+                        icon={<Hash className="w-4.5 h-4.5 text-slate-400" />}
+                        required
+                      />
+                    )}
+
+                    {montoInscripcion > 0 && (
+                      <div className="p-4 bg-gradient-to-r from-brand-50 to-brand-100 border border-brand-200 rounded-xl flex items-center justify-between">
+                        <span className="text-xs font-black text-brand-700 uppercase tracking-wider">Total a cobrar ahora</span>
+                        <span className="text-lg font-black text-brand-700">{formatCurrency(montoInscripcion)}</span>
+                      </div>
+                    )}
+                  </>
+                )}
+                </div>
+
+                <div className="pt-4 border-t border-slate-100 flex justify-end">
+                  <Button variant="success" type="submit" size="lg" fullWidth icon={<CheckCircle2 className="w-4.5 h-4.5" />}>
+                    Revisar Inscripción
+                  </Button>
+                </div>
+              </form>
+            </Card>
+          </div>
+
+          <div className="xl:col-span-1">
+            <Card title="Resumen de Inscripción" subtitle="Detalle del curso seleccionado">
+              <div className="flex flex-col gap-5 text-sm font-semibold text-slate-700">
+
+                <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                  <span className="text-slate-400 font-bold uppercase text-xs">Duración</span>
+                  <span className="text-slate-800 font-extrabold">3 meses</span>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <span className="text-slate-400 font-bold uppercase text-xs">Total del Curso</span>
+                  {selectedCourse && (
+                    <>
+                      <div className="flex items-center justify-between">
+                        {selectedCourse.frecuenciaPago === 'unico' ? (
+                          <>
+                            <span className="text-slate-600">Pago único</span>
+                            <span className="text-rose-600 font-black">{formatCurrency(selectedCourse.costo)}</span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-slate-600">{formatCurrency(selectedCourse.costo)}/{selectedCourse.frecuenciaPago === 'semanal' ? 'sem' : selectedCourse.frecuenciaPago === 'quincenal' ? 'quinc' : 'mes'} × {Math.round(((selectedCourse.duracionModuloMeses || 1) * selectedCourse.modulos * 30) / getIntervalDays(selectedCourse.frecuenciaPago))} períodos</span>
+                            <span className="text-rose-600 font-black">{formatCurrency(getTotalCourseCost(selectedCourse))}</span>
+                          </>
+                        )}
+                      </div>
+                      <span className="text-[10px] font-semibold text-slate-400">
+                        {(selectedCourse.tipoPeriodoAcademico || 'mensual')} · {selectedCourse.duracionModuloMeses || 1} {((selectedCourse.duracionModuloMeses || 1) === 1) ? 'mes' : 'meses'} / módulo · Pago {selectedCourse.frecuenciaPago === 'semanal' ? 'semanal' : selectedCourse.frecuenciaPago === 'quincenal' ? 'quincenal' : selectedCourse.frecuenciaPago === 'mensual' ? 'mensual' : 'único'}
+                      </span>
+                    </>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-2 border-t border-slate-100 pt-4">
+                  <span className="text-slate-400 font-bold uppercase text-xs">Inscripción</span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-600">{inscripcionGratis ? 'Gratis' : formatCurrency(montoInscripcion)}</span>
+                    <span className={`font-black ${inscripcionGratis ? 'text-emerald-600' : 'text-brand-600'}`}>
+                      {inscripcionGratis ? '$0' : formatCurrency(montoInscripcion)}
+                    </span>
+                  </div>
+                  {!inscripcionGratis && montoInscripcion > 0 && (
+                    <span className="text-[10px] font-semibold text-emerald-600">Se cobrará ahora</span>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-3 bg-slate-50 border border-slate-100 p-4.5 rounded-2xl mt-2 text-xs font-bold text-slate-500">
+                  <div className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-brand-500" />
+                    <span>Matrícula generada automáticamente</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-brand-500" />
+                    <span>Inscripción se cobra ahora; mensualidades en <strong>Cobros</strong></span>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          </div>
+        </div>
+      ) : (
+        <div className="no-print animate-fade-in">
+          <Card title="Revisar datos de inscripción">
+            <div className="flex flex-col gap-6">
               {error && (
                 <div className="flex items-center gap-2.5 p-3.5 bg-rose-50 border border-rose-100 rounded-xl text-rose-700 text-xs font-semibold">
                   <ShieldCheck className="w-4.5 h-4.5 text-rose-500 shrink-0" />
@@ -229,200 +636,121 @@ export const Enroll: React.FC = () => {
                 </div>
               )}
 
-              <div className="flex items-center gap-4 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                <Button
-                  variant={isNewStudent ? 'primary' : 'outline'}
-                  size="sm"
-                  type="button"
-                  onClick={() => {
-                    setIsNewStudent(true);
-                    setNombreCompleto('');
-                    setTelefono('');
-                    setFechaNacimiento('');
-                    setCedula('');
-                    setDireccion('');
-                  }}
-                >
-                  Nuevo Estudiante
-                </Button>
-                <Button
-                  variant={!isNewStudent ? 'primary' : 'outline'}
-                  size="sm"
-                  type="button"
-                  onClick={() => setIsNewStudent(false)}
-                >
-                  Estudiante Registrado
-                </Button>
-              </div>
-
-              {isNewStudent ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="flex flex-col gap-4">
-                  <Input
-                    label="Nombre Completo *"
-                    value={nombreCompleto}
-                    onChange={(e) => setNombreCompleto(e.target.value)}
-                    placeholder="Ej: Laura Mercedes Pérez"
-                    icon={<User className="w-4.5 h-4.5" />}
-                    required
-                  />
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <Input
-                      label="Fecha Nacimiento *"
-                      type="date"
-                      value={fechaNacimiento}
-                      onChange={(e) => setFechaNacimiento(e.target.value)}
-                    />
-                    <Input
-                      label="Teléfono *"
-                      value={telefono}
-                      onChange={(e) => setTelefono(e.target.value)}
-                      placeholder="809-555-0123"
-                    />
-                    <Input
-                      label="Cédula"
-                      value={cedula}
-                      onChange={(e) => setCedula(e.target.value)}
-                      placeholder="Opcional < 18 años"
-                    />
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                      Dirección de Residencia
-                    </label>
-                    <textarea
-                      value={direccion}
-                      onChange={(e) => setDireccion(e.target.value)}
-                      placeholder="Dirección física completa (Opcional)..."
-                      className="w-full px-4 py-2.5 bg-white border border-slate-200 focus:ring-brand-100 focus:border-brand-500 rounded-xl text-slate-800 text-sm transition-all duration-200 focus:outline-hidden focus:ring-4 h-16"
-                    />
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Datos del Estudiante</h3>
+                  <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 flex flex-col gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-600 text-sm font-black shrink-0">
+                        {nombreCompleto.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-bold text-slate-800">{nombreCompleto}</span>
+                        <span className="text-[10px] font-semibold text-slate-400">{cedula ? `Cédula: ${cedula}` : 'Sin cédula'}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-slate-500 font-semibold">
+                      <span>Tel: {telefono}</span>
+                      {direccion && (
+                        <>
+                          <span className="w-1 h-1 rounded-full bg-slate-300" />
+                          <span>{direccion}</span>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
-              ) : (
-                <div className="flex flex-col gap-4">
-                  <div className="relative flex flex-col gap-1.5">
-                    <Input
-                      label="Buscar Estudiante (Nombre o Cédula) *"
-                      value={studentSearchTerm}
-                      onChange={(e) => {
-                        setStudentSearchTerm(e.target.value);
-                        setIsDropdownOpen(true);
-                        if (!e.target.value) setExistingStudentId('');
-                      }}
-                      onFocus={() => setIsDropdownOpen(true)}
-                      onBlur={() => setTimeout(() => setIsDropdownOpen(false), 200)}
-                      placeholder="Ej: Laura o 001..."
-                      icon={<Search className="w-4.5 h-4.5 text-slate-400" />}
-                    />
 
-                    {isDropdownOpen && studentSearchTerm && (
-                      <div className="absolute top-[64px] left-0 right-0 z-50 mt-1 max-h-60 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-lg p-1">
-                        {filteredExistingStudents.length > 0 ? (
-                          filteredExistingStudents.map((s) => (
-                            <button
-                              key={s.id}
-                              type="button"
-                              className="w-full text-left px-3 py-2 text-sm hover:bg-brand-50 rounded-lg transition-colors flex flex-col"
-                              onMouseDown={() => {
-                                setExistingStudentId(s.id);
-                                setStudentSearchTerm(s.nombreCompleto);
-                                setIsDropdownOpen(false);
-                              }}
-                            >
-                              <span className="font-bold text-slate-800">{s.nombreCompleto}</span>
-                              <span className="text-[10px] font-semibold text-slate-400">Cédula: {s.cedula || 'N/A'} - Matrícula: {s.matricula}</span>
-                            </button>
-                          ))
-                        ) : (
-                          <div className="px-3 py-4 text-center text-sm text-slate-500 font-semibold">
-                            No se encontraron estudiantes.
-                          </div>
-                        )}
-                      </div>
+                <div className="flex flex-col gap-4">
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Curso y Horario</h3>
+                  <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 flex flex-col gap-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-slate-500">Curso:</span>
+                      <span className="text-sm font-bold text-slate-800">{selectedCourse?.nombre || 'N/A'}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-slate-500">Horario:</span>
+                      <Badge variant="info" size="sm">{horario || 'N/A'}</Badge>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-slate-500">Duración:</span>
+                      <span className="text-sm font-bold text-slate-800">{selectedCourse?.duracion || 'N/A'}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-slate-500">Pago / módulo:</span>
+                      <span className="text-sm font-bold text-slate-800">{formatCurrency(selectedCourse?.costo ?? 0)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-slate-500">Módulos totales:</span>
+                      <span className="text-sm font-bold text-slate-800">{selectedCourse?.modulos ?? 0}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Costo de Inscripción */}
+              <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-xl flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+                  <div>
+                    <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Inscripción</span>
+                    <p className="text-xs font-semibold text-emerald-600 mt-0.5">
+                      {inscripcionGratis
+                        ? 'Gratis'
+                        : `Costo: ${formatCurrency(montoInscripcion)} — Pagado ahora`}
+                    </p>
+                  </div>
+                </div>
+                {!inscripcionGratis && (
+                  <span className="text-lg font-black text-emerald-700">{formatCurrency(montoInscripcion)}</span>
+                )}
+              </div>
+
+              {/* Deuda de Mensualidades */}
+              <div className="p-4 bg-rose-50 border border-rose-100 rounded-xl flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Wallet className="w-5 h-5 text-rose-500 shrink-0" />
+                  <div>
+                    <span className="text-xs font-bold text-rose-700 uppercase tracking-wider">Deuda Total del Curso</span>
+                    {selectedCourse?.frecuenciaPago === 'unico' ? (
+                      <p className="text-xs font-semibold text-rose-600 mt-0.5">
+                        Pago único: {formatCurrency(selectedCourse.costo)}
+                      </p>
+                    ) : (
+                      <p className="text-xs font-semibold text-rose-600 mt-0.5">
+                        {formatCurrency(selectedCourse?.costo ?? 0)}/{selectedCourse?.frecuenciaPago === 'semanal' ? 'sem' : 'mes'} × {selectedCourse ? Math.round(((selectedCourse.duracionModuloMeses || 1) * selectedCourse.modulos * 30) / getIntervalDays(selectedCourse.frecuenciaPago)) : 0} períodos
+                      </p>
                     )}
                   </div>
-                  {existingStudentId && (
-                    <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl flex flex-col gap-2.5 text-xs text-slate-600 font-semibold">
-                      <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Información Sincronizada</span>
-                      <span>Nombre: {nombreCompleto}</span>
-                      <span>Cédula: {cedula}</span>
-                      <span>Teléfono: {telefono}</span>
-                      <span>Dirección: {direccion}</span>
-                    </div>
-                  )}
                 </div>
-              )}
+                <span className="text-lg font-black text-rose-600">
+                  {formatCurrency(getTotalCourseCost(selectedCourse))}
+                </span>
+              </div>
 
-              <div className="border-t border-slate-100 pt-6 flex flex-col gap-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <Select
-                    label="Curso a Inscribir *"
-                    value={cursoId}
-                    onChange={(e) => setCursoId(e.target.value)}
-                    options={[
-                      { value: '', label: 'Seleccionar curso...' },
-                      ...courses
-                        .filter((c) => c.estado === 'activo')
-                        .map((c) => ({ value: c.id, label: `${c.nombre} (${formatCurrency(c.costo)})` }))
-                    ]}
-                  />
-                  <Select
-                    label="Horario Asignado *"
-                    value={horario}
-                    onChange={(e) => setHorario(e.target.value)}
-                    options={[
-                      { value: '', label: 'Elegir tanda...' },
-                      { value: '9:00 am - 12:00 pm', label: 'Mañana (9:00 am - 12:00 pm)' },
-                      { value: '2:00 pm - 5:00 pm', label: 'Tarde (2:00 pm - 5:00 pm)' }
-                    ]}
-                  />
+              <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl flex items-start gap-3">
+                <ShieldCheck className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                <div className="text-xs font-semibold text-amber-800">
+                  <p className="font-bold">Resumen del proceso</p>
+                  <p className="mt-1">
+                    <strong>{inscripcionGratis ? 'Inscripción gratis' : `${formatCurrency(montoInscripcion)} cobrados por inscripción`}</strong>
+                    {selectedCourse && ` — La deuda de ${formatCurrency(getTotalCourseCost(selectedCourse))} por el curso completo quedará registrada para cobrarse en la sección Cobros.`}
+                  </p>
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-slate-100 flex justify-end">
-                <Button variant="success" type="submit" size="lg" fullWidth icon={<CreditCard className="w-4.5 h-4.5" />}>
-                  Completar Inscripción
+              <div className="flex items-center gap-3 pt-4 border-t border-slate-100">
+                <Button variant="outline" type="button" icon={<ShieldCheck className="w-4 h-4" />} onClick={() => setStep('form')}>
+                  Editar Datos
                 </Button>
-              </div>
-            </form>
-          </Card>
-        </div>
-
-        <div className="xl:col-span-1">
-          <Card title="Resumen de Inscripción" subtitle="Detalle del curso seleccionado">
-            <div className="flex flex-col gap-5 text-sm font-semibold text-slate-700">
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400 font-bold uppercase text-xs">Costo del Programa</span>
-                <span className="text-slate-800 font-extrabold">{formatCurrency(selectedCourseCost)}</span>
-              </div>
-              <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-                <span className="text-slate-400 font-bold uppercase text-xs">Duración</span>
-                <span className="text-slate-800 font-extrabold">3 meses</span>
-              </div>
-              <div className="flex items-center justify-between border-t border-slate-100 pt-4">
-                <span className="text-rose-600 font-black uppercase text-xs">Total a Pagar (Deuda)</span>
-                <span className="text-rose-600 font-black text-lg">{formatCurrency(selectedCourseCost)}</span>
-              </div>
-
-              <div className="flex flex-col gap-3 bg-slate-50 border border-slate-100 p-4.5 rounded-2xl mt-2 text-xs font-bold text-slate-500">
-                <div className="flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-brand-500" />
-                  <span>Matrícula generada automáticamente</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-brand-500" />
-                  <span>Deuda registrada por el costo total del curso</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-brand-500" />
-                  <span>Los pagos se realizan en <strong>Registrar Abono</strong></span>
-                </div>
+                <Button variant="success" type="button" size="lg" fullWidth icon={<CheckCircle2 className="w-4.5 h-4.5" />} onClick={handleConfirmEnrollment}>
+                  Confirmar Inscripción
+                </Button>
               </div>
             </div>
           </Card>
         </div>
-      </div>
+      )}
 
       {/* Modal de Confirmación de Inscripción */}
       {enrolledStudent && (() => {
@@ -436,7 +764,7 @@ export const Enroll: React.FC = () => {
           >
             <div className="flex flex-col gap-6 w-full" id="invoice-printable-container">
               <div id="invoice-printable">
-                <div className={printMode === 'ticket' ? 'ticket-print relative overflow-hidden bg-white p-7 rounded-[2rem] border border-slate-100 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.1)] flex flex-col font-sans' : 'fullpage-print'}>
+                <div className={printMode === 'ticket' ? 'ticket-print relative overflow-hidden bg-white p-7 rounded-[2rem] border border-slate-100 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.1)] flex flex-col font-sans' : 'fullpage-print bg-white border border-slate-100 rounded-2xl shadow-sm'}>
                   {printMode === 'ticket' && (
                     <div className="absolute -top-12 -right-12 w-32 h-32 bg-brand-50 rounded-full opacity-60" data-html2canvas-ignore="true"></div>
                   )}
@@ -447,6 +775,9 @@ export const Enroll: React.FC = () => {
                     </div>
                     <span className={printMode === 'ticket' ? 'font-black text-xl text-slate-800 tracking-tight mt-2' : 'font-black text-2xl text-slate-800 tracking-tight mt-3'}>Colegio de Estrellas La Excelencia</span>
                     <span className={printMode === 'ticket' ? 'text-[10px] font-extrabold text-slate-400 uppercase tracking-widest leading-none' : 'text-xs font-bold text-slate-500 uppercase tracking-widest'}>Comprobante de Inscripción</span>
+                    {enrolledStudent.inscripcionGratis && (
+                      <span className={printMode === 'ticket' ? 'mt-1 text-[9px] font-black text-emerald-600 uppercase tracking-widest' : 'mt-1.5 text-xs font-black text-emerald-600 uppercase tracking-widest'}>Inscripción Gratis</span>
+                    )}
                   </div>
 
                   <div className={printMode === 'ticket' ? 'grid grid-cols-2 gap-y-4 py-5 border-b border-slate-100 text-xs font-semibold text-slate-600' : 'grid grid-cols-2 gap-y-5 py-6 border-b border-slate-200 text-sm font-semibold text-slate-600'}>
@@ -479,9 +810,53 @@ export const Enroll: React.FC = () => {
                     </div>
                   </div>
 
+                  {/* Inscripción pagada */}
+                  <div className={printMode === 'ticket' ? 'flex flex-col py-5 text-xs text-slate-600 font-semibold gap-3 border-b border-slate-100' : 'flex flex-col py-6 text-sm text-slate-600 font-semibold gap-4 border-b border-slate-200'}>
+                    <div className="flex flex-col gap-1 p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Inscripción</span>
+                        <span className="text-lg font-black text-emerald-700">{formatCurrency(enrolledStudent.costoInscripcion)}</span>
+                      </div>
+                      {enrolledStudent.inscripcionGratis ? (
+                        <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider">Gratis</span>
+                      ) : (
+                        <>
+                          <div className="flex justify-between items-center mt-1">
+                            <span className="text-slate-500 font-bold">Monto Recibido</span>
+                            <span className="text-slate-800 font-extrabold">{formatCurrency(enrolledPayment?.montoRecibido ?? enrolledStudent.costoInscripcion)}</span>
+                          </div>
+                          {(enrolledPayment?.vuelta ?? 0) > 0 && (
+                            <div className="flex justify-between items-center">
+                              <span className="text-slate-500 font-bold">Vuelta</span>
+                              <span className="text-amber-600 font-extrabold">{formatCurrency(enrolledPayment?.vuelta ?? 0)}</span>
+                            </div>
+                          )}
+                          {enrolledPayment && (
+                            <div className="flex justify-between items-center">
+                              <span className="text-slate-500 font-bold">Método</span>
+                              <span className="text-slate-800 font-bold uppercase">{enrolledPayment.metodoPago}</span>
+                            </div>
+                          )}
+                          {enrolledPayment?.referenciaTransferencia && (
+                            <div className="flex justify-between items-center">
+                              <span className="text-slate-500 font-bold">Referencia</span>
+                              <span className="text-slate-800 font-bold font-mono">{enrolledPayment.referenciaTransferencia}</span>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Deuda de Mensualidades (pendiente) */}
                   <div className={printMode === 'ticket' ? 'flex flex-col py-5 text-xs text-slate-600 font-semibold gap-3' : 'flex flex-col py-6 text-sm text-slate-600 font-semibold gap-4'}>
                     <div className="flex justify-between items-center p-3 bg-gradient-to-r from-slate-800 to-slate-900 text-white rounded-xl shadow-md">
-                      <span className="uppercase text-[10px] font-black tracking-widest text-slate-300">Deuda Total del Curso</span>
+                      <div className="flex flex-col">
+                        <span className="uppercase text-[10px] font-black tracking-widest text-slate-300">Mensualidades (pendiente en Cobros)</span>
+                        {course && (
+                          <span className="text-[9px] text-slate-400 font-semibold mt-0.5">{formatCurrency(course.costo)} × {course.modulos} módulos</span>
+                        )}
+                      </div>
                       <span className={printMode === 'ticket' ? 'text-lg font-black text-white' : 'text-xl font-black text-white'}>{formatCurrency(enrolledStudent.balancePendiente)}</span>
                     </div>
                   </div>
@@ -521,14 +896,12 @@ export const Enroll: React.FC = () => {
                 <Button variant="outline" className="flex-1" icon={<Printer className="w-4 h-4" />} onClick={handlePrint}>
                   {printMode === 'ticket' ? 'Imprimir Ticket' : 'Imprimir Hoja Completa'}
                 </Button>
-                <Button variant="secondary" className="flex-1" onClick={() => setIsConfirmModalOpen(false)}>
+                <Button variant="primary" icon={<Wallet className="w-4 h-4" />} onClick={() => { setIsConfirmModalOpen(false); navigate('/payments'); }}>
+                  Ir a Cobros
+                </Button>
+                <Button variant="secondary" onClick={() => setIsConfirmModalOpen(false)}>
                   Cerrar
                 </Button>
-              </div>
-              <div className="no-print pt-2 flex justify-center">
-                <p className="text-xs font-semibold text-slate-400 text-center">
-                  Para realizar pagos, vaya a la sección <strong>Cobros</strong> en el menú lateral.
-                </p>
               </div>
             </div>
           </Modal>

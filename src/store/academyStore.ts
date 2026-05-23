@@ -34,10 +34,15 @@ interface AcademyState {
   updateStudent: (student: Student) => void;
   deleteStudent: (id: string) => void;
 
-  // Sistema de Inscripción (solo registra al alumno, sin pago)
+  // Sistema de Inscripción (registra al alumno + pago de inscripción si aplica)
   enrollStudent: (
-    studentData: Omit<Student, 'id' | 'matricula' | 'fechaInscripcion' | 'balancePendiente' | 'inscripcionGratis'>
-  ) => Student; // Devuelve el estudiante inscrito
+    studentData: Omit<Student, 'id' | 'matricula' | 'fechaInscripcion' | 'balancePendiente'>,
+    paymentData?: {
+      montoRecibido: number;
+      metodoPago: 'efectivo' | 'transferencia';
+      referenciaTransferencia?: string;
+    }
+  ) => { student: Student; payment: Payment | null };
 
   // Sistema de Abonos (Pagos a estudiantes existentes)
   registerPayment: (
@@ -157,7 +162,7 @@ export const useAcademyStore = create<AcademyState>()(
       // ==========================================
       // SISTEMA DE INSCRIPCIÓN Y PAGOS (POS)
       // ==========================================
-      enrollStudent: (studentData) => {
+      enrollStudent: (studentData, paymentData?) => {
         const state = get();
 
         // Validar duplicidad por cédula
@@ -183,7 +188,27 @@ export const useAcademyStore = create<AcademyState>()(
         const matriculaCount = state.students.length + 1;
         const matricula = `MAT-${currentYear}-${String(matriculaCount).padStart(4, '0')}`;
 
-        // 2. Crear Registro de Estudiante (deuda total = costo del curso)
+        // 2. Calcular deuda total según frecuencia y duración
+        const getIntervalDays = (f: string): number => {
+          switch (f) {
+            case 'semanal': return 7;
+            case 'quincenal': return 15;
+            case 'mensual': return 30;
+            default: return 15;
+          }
+        };
+
+        let totalDebt: number;
+        if (course.frecuenciaPago === 'unico') {
+          totalDebt = course.costo;
+        } else {
+          const intervalDays = getIntervalDays(course.frecuenciaPago);
+          const monthsPerModule = course.duracionModuloMeses || 1;
+          const totalMonths = monthsPerModule * course.modulos;
+          const totalPeriods = (totalMonths * 30) / intervalDays;
+          totalDebt = course.costo * totalPeriods;
+        }
+
         const nuevoEstudiante: Student = {
           id: studentId,
           nombreCompleto: studentData.nombreCompleto,
@@ -193,18 +218,70 @@ export const useAcademyStore = create<AcademyState>()(
           fechaNacimiento: studentData.fechaNacimiento,
           matricula,
           fechaInscripcion: new Date().toISOString(),
-          balancePendiente: course.costo,
+          balancePendiente: totalDebt,
           cursoId: studentData.cursoId,
           horario: studentData.horario,
-          inscripcionGratis: false
+          inscripcionGratis: studentData.inscripcionGratis,
+          costoInscripcion: studentData.costoInscripcion
         };
 
-        // 3. Actualizar Estado Global (solo estudiante, sin pago)
-        set({
-          students: [...state.students, nuevoEstudiante]
-        });
+        // 3. Crear pago de inscripción si aplica
+        let nuevoPago: Payment | null = null;
 
-        return nuevoEstudiante;
+        if (paymentData && studentData.costoInscripcion > 0) {
+          get().checkOrCreateDailyClosure();
+
+          const updatedState = get();
+          const invoiceCount = updatedState.payments.length + 1;
+          const invoiceId = `FAC-${1000 + invoiceCount}`;
+          const hoy = getTodayDateStr();
+          const hora = getCurrentTimeStr();
+
+          nuevoPago = {
+            id: invoiceId,
+            matricula,
+            estudianteId: studentId,
+            estudianteNombre: studentData.nombreCompleto,
+            cursoId: studentData.cursoId,
+            cursoNombre: course.nombre,
+            montoPagado: studentData.costoInscripcion,
+            balance: totalDebt, // la inscripción no afecta balancePendiente
+            metodoPago: paymentData.metodoPago,
+            referenciaTransferencia: paymentData.referenciaTransferencia,
+            fecha: hoy,
+            hora,
+            horario: studentData.horario,
+            costoInscripcion: studentData.costoInscripcion
+          };
+
+          // Actualizar cierre de caja
+          const closureUpdated = updatedState.closures.map((closure) => {
+            if (closure.fecha === hoy && !closure.cerrado) {
+              const isEfectivo = paymentData.metodoPago === 'efectivo';
+              return {
+                ...closure,
+                totalEfectivo: closure.totalEfectivo + (isEfectivo ? studentData.costoInscripcion : 0),
+                totalTransferencia: closure.totalTransferencia + (!isEfectivo ? studentData.costoInscripcion : 0),
+                totalGeneral: closure.totalGeneral + studentData.costoInscripcion,
+                cantidadPagos: closure.cantidadPagos + 1,
+                pagos: [...closure.pagos, nuevoPago!]
+              };
+            }
+            return closure;
+          });
+
+          set({
+            students: [...updatedState.students, nuevoEstudiante],
+            payments: [...updatedState.payments, nuevoPago!],
+            closures: closureUpdated
+          });
+        } else {
+          set({
+            students: [...state.students, nuevoEstudiante]
+          });
+        }
+
+        return { student: nuevoEstudiante, payment: nuevoPago };
       },
 
       // ==========================================

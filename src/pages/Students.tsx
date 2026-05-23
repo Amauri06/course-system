@@ -6,7 +6,7 @@ import { Modal } from '../components/ui/Modal';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { Edit, Trash2, ShieldAlert, Search, Printer } from 'lucide-react';
-import { formatCurrency, formatDateStr } from '../utils/formatters';
+import { formatCurrency, formatDateStr, inputValue } from '../utils/formatters';
 import { z } from 'zod';
 import { differenceInYears } from 'date-fns';
 
@@ -347,7 +347,7 @@ export const Students: React.FC = () => {
             <Input
               label="Balance Pendiente ($) *"
               type="number"
-              value={balancePendiente}
+              value={inputValue(balancePendiente)}
               onChange={(e) => setBalancePendiente(Number(e.target.value))}
               placeholder="0"
               required

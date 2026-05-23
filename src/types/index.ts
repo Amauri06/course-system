@@ -1,12 +1,15 @@
 export interface Course {
   id: string;
   nombre: string;
-  duracion: string; // Siempre "3 meses"
+  duracion: string; // Solo para display, ej: "3 meses"
   modulos: number;
-  costo: number;
+  costo: number; // Costo por módulo
   descripcion: string;
-  profesorId: string | null; // ID del profesor asignado
+  profesorId: string | null;
   estado: 'activo' | 'inactivo';
+  frecuenciaPago: 'semanal' | 'quincenal' | 'mensual' | 'unico';
+  tipoPeriodoAcademico: 'mensual' | 'trimestral' | 'cuatrimestral' | 'semestral' | 'personalizado';
+  duracionModuloMeses: number; // Meses que dura cada módulo
 }
 
 export interface Teacher {
@@ -28,10 +31,11 @@ export interface Student {
   fechaNacimiento: string; // YYYY-MM-DD
   matricula: string; // MAT-YYYY-XXXX (generado automáticamente)
   fechaInscripcion: string; // ISO string
-  balancePendiente: number;
+  balancePendiente: number; // Deuda de mensualidades (quincenal)
   cursoId: string; // Curso en el que está inscrito
   horario: string;
   inscripcionGratis: boolean;
+  costoInscripcion: number; // Monto pagado por la inscripción (0 si gratis)
 }
 
 export interface Payment {

@@ -85,6 +85,15 @@ export const CourseDetail: React.FC = () => {
           <p className="text-sm font-semibold text-slate-400 max-w-2xl leading-relaxed">
             {course.descripcion}
           </p>
+          <div className="flex items-center gap-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+            <span>{course.duracion}</span>
+            <span>•</span>
+            <span>{course.modulos} módulos ({course.tipoPeriodoAcademico || 'mensual'})</span>
+            <span>•</span>
+            <span>{course.duracionModuloMeses || 1} {((course.duracionModuloMeses || 1) === 1) ? 'mes' : 'meses'} / módulo</span>
+            <span>•</span>
+            <span>Pago: {course.frecuenciaPago === 'semanal' ? 'Semanal' : course.frecuenciaPago === 'quincenal' ? 'Quincenal' : course.frecuenciaPago === 'mensual' ? 'Mensual' : 'Único'}</span>
+          </div>
         </div>
         <div className="flex flex-col items-start sm:items-end text-slate-600">
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Costo Mensual</span>

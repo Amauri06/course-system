@@ -22,7 +22,20 @@ export const Courses: React.FC = () => {
   const [descripcion, setDescripcion] = useState('');
   const [profesorId, setProfesorId] = useState('');
   const [estado, setEstado] = useState<'activo' | 'inactivo'>('activo');
+  const [frecuenciaPago, setFrecuenciaPago] = useState<'semanal' | 'quincenal' | 'mensual' | 'unico'>('quincenal');
+  const [tipoPeriodoAcademico, setTipoPeriodoAcademico] = useState<'mensual' | 'trimestral' | 'cuatrimestral' | 'semestral' | 'personalizado'>('mensual');
+  const [duracionModuloMeses, setDuracionModuloMeses] = useState(1);
   const [error, setError] = useState('');
+
+  const getDefaultMonthsForType = (tipo: string) => {
+    switch (tipo) {
+      case 'mensual': return 1;
+      case 'trimestral': return 3;
+      case 'cuatrimestral': return 4;
+      case 'semestral': return 6;
+      default: return 1;
+    }
+  };
 
   const openCreateModal = () => {
     setEditingCourse(null);
@@ -32,6 +45,9 @@ export const Courses: React.FC = () => {
     setDescripcion('');
     setProfesorId(teachers[0]?.id || '');
     setEstado('activo');
+    setFrecuenciaPago('quincenal');
+    setTipoPeriodoAcademico('mensual');
+    setDuracionModuloMeses(1);
     setError('');
     setIsModalOpen(true);
   };
@@ -44,6 +60,9 @@ export const Courses: React.FC = () => {
     setDescripcion(course.descripcion);
     setProfesorId(course.profesorId || '');
     setEstado(course.estado);
+    setFrecuenciaPago(course.frecuenciaPago || 'quincenal');
+    setTipoPeriodoAcademico(course.tipoPeriodoAcademico || 'mensual');
+    setDuracionModuloMeses(course.duracionModuloMeses || 1);
     setError('');
     setIsModalOpen(true);
   };
@@ -57,12 +76,15 @@ export const Courses: React.FC = () => {
 
     const coursePayload = {
       nombre,
-      duracion: '3 meses', // Regla: Todos duran 3 meses
+      duracion: `${duracionModuloMeses * modulos} meses`,
       modulos: Number(modulos),
       costo: Number(costo),
       descripcion,
       profesorId: profesorId || null,
-      estado
+      estado,
+      frecuenciaPago,
+      tipoPeriodoAcademico,
+      duracionModuloMeses: Number(duracionModuloMeses),
     };
 
     if (editingCourse) {
@@ -166,7 +188,7 @@ export const Courses: React.FC = () => {
                       {course.nombre}
                     </h3>
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                      {course.duracion} • {course.modulos} Módulos
+                      {course.duracion} • {course.modulos} módulos ({course.tipoPeriodoAcademico || 'mensual'})
                     </span>
                   </div>
                   <Badge variant={course.estado === 'activo' ? 'success' : 'secondary'}>
@@ -180,18 +202,24 @@ export const Courses: React.FC = () => {
                 </p>
 
                 {/* Stats */}
-                <div className="grid grid-cols-2 gap-4 py-3 border-y border-slate-100 my-1 text-slate-600">
+                <div className="grid grid-cols-3 gap-4 py-3 border-y border-slate-100 my-1 text-slate-600">
                   <div className="flex flex-col">
-                    <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest">Costo</span>
+                    <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest">Costo/mod</span>
                     <span className="text-sm font-extrabold text-slate-800 mt-0.5">
                       {formatCurrency(course.costo)}
+                    </span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest">Pago</span>
+                    <span className="text-sm font-extrabold text-slate-800 mt-0.5">
+                      {course.frecuenciaPago === 'semanal' ? 'Semanal' : course.frecuenciaPago === 'quincenal' ? 'Quincenal' : course.frecuenciaPago === 'mensual' ? 'Mensual' : 'Único'}
                     </span>
                   </div>
                   <div className="flex flex-col">
                     <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest">Inscritos</span>
                     <span className="text-sm font-extrabold text-slate-800 mt-0.5 flex items-center gap-1">
                       <GraduationCap className="w-4 h-4 text-brand-600 shrink-0" />
-                      {studentCount} Alumnos
+                      {studentCount}
                     </span>
                   </div>
                 </div>
@@ -248,6 +276,56 @@ export const Courses: React.FC = () => {
               placeholder="6"
               required
             />
+          </div>
+
+          <Select
+            label="Frecuencia de Pago *"
+            value={frecuenciaPago}
+            onChange={(e) => setFrecuenciaPago(e.target.value as 'semanal' | 'quincenal' | 'mensual' | 'unico')}
+            options={[
+              { value: 'quincenal', label: 'Quincenal (cada 15 días)' },
+              { value: 'mensual', label: 'Mensual' },
+              { value: 'semanal', label: 'Semanal (cada 7 días)' },
+              { value: 'unico', label: 'Pago Único' }
+            ]}
+          />
+
+          <div className="grid grid-cols-2 gap-4">
+            <Select
+              label="Tipo de Período Académico *"
+              value={tipoPeriodoAcademico}
+              onChange={(e) => {
+                const tipo = e.target.value as 'mensual' | 'trimestral' | 'cuatrimestral' | 'semestral' | 'personalizado';
+                setTipoPeriodoAcademico(tipo);
+                if (tipo !== 'personalizado') {
+                  setDuracionModuloMeses(getDefaultMonthsForType(tipo));
+                }
+              }}
+              options={[
+                { value: 'mensual', label: 'Mensual (1 mes por módulo)' },
+                { value: 'trimestral', label: 'Trimestral (3 meses por módulo)' },
+                { value: 'cuatrimestral', label: 'Cuatrimestral (4 meses por módulo)' },
+                { value: 'semestral', label: 'Semestral (6 meses por módulo)' },
+                { value: 'personalizado', label: 'Personalizado' }
+              ]}
+            />
+            {tipoPeriodoAcademico === 'personalizado' ? (
+              <Input
+                label="Duración por Módulo (meses) *"
+                type="number"
+                value={duracionModuloMeses}
+                onChange={(e) => setDuracionModuloMeses(Number(e.target.value))}
+                placeholder="Ej: 2"
+                required
+              />
+            ) : (
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Duración por Módulo</label>
+                <div className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm font-bold flex items-center h-[42px]">
+                  {duracionModuloMeses} {duracionModuloMeses === 1 ? 'mes' : 'meses'}
+                </div>
+              </div>
+            )}
           </div>
 
           <Select

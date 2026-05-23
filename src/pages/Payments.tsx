@@ -23,12 +23,52 @@ import {
   ArrowRight
 } from 'lucide-react';
 import html2pdf from 'html2pdf.js';
-import { formatCurrency } from '../utils/formatters';
+import { formatCurrency, inputValue } from '../utils/formatters';
 import type { Student, Payment } from '../types';
 
 // ==========================================
-// Helper functions for quincena tracking
+// Helper functions for payment tracking
 // ==========================================
+const getIntervalDays = (frecuencia: string): number => {
+  switch (frecuencia) {
+    case 'semanal': return 7;
+    case 'quincenal': return 15;
+    case 'mensual': return 30;
+    default: return 15;
+  }
+};
+
+const getFrecuenciaLabel = (f: string) => {
+  if (f === 'semanal') return 'Semanal';
+  if (f === 'quincenal') return 'Quincenal';
+  if (f === 'mensual') return 'Mensual';
+  return 'Único';
+};
+
+const getDefaultPaymentAmount = (course: any): number => {
+  if (!course) return 250;
+  return course.costo;
+};
+
+const getTotalCourseCost = (course: any): number => {
+  if (!course) return 0;
+  if (course.frecuenciaPago === 'unico') return course.costo;
+  const intervalDays = getIntervalDays(course.frecuenciaPago);
+  const monthsPerModule = course.duracionModuloMeses || 1;
+  const totalMonths = monthsPerModule * course.modulos;
+  const totalPeriods = (totalMonths * 30) / intervalDays;
+  return course.costo * totalPeriods;
+};
+
+const getModuleTotalCost = (course: any): number => {
+  if (!course) return 0;
+  if (course.frecuenciaPago === 'unico') return course.costo;
+  const intervalDays = getIntervalDays(course.frecuenciaPago);
+  const monthsPerModule = course.duracionModuloMeses || 1;
+  const periodsPerModule = (monthsPerModule * 30) / intervalDays;
+  return course.costo * periodsPerModule;
+};
+
 const getNextDueDate = (): Date => {
   const now = new Date();
   if (now.getDate() <= 15) return new Date(now.getFullYear(), now.getMonth(), 15);
@@ -41,52 +81,65 @@ const getNextDueDateLabel = (): string => {
   return `${d.getDate()} de ${months[d.getMonth()]} ${d.getFullYear()}`;
 };
 
-const getQuincenaFromDate = (dateStr: string): string => {
+const getPeriodLabel = (dateStr: string, frecuencia: string = 'quincenal'): string => {
   const d = new Date(dateStr + 'T00:00:00');
   const months = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
-  const day = d.getDate();
-  const period = day <= 15 ? '1ra' : '2da';
-  return `${period} quincena ${months[d.getMonth()]}`;
+  if (frecuencia === 'mensual') return `${months[d.getMonth()]} ${d.getFullYear()}`;
+  if (frecuencia === 'quincenal') {
+    const period = d.getDate() <= 15 ? '1ra' : '2da';
+    return `${period} quincena ${months[d.getMonth()]}`;
+  }
+  if (frecuencia === 'semanal') return `Sem ${Math.ceil(d.getDate() / 7)} ${months[d.getMonth()]}`;
+  return 'Pago único';
 };
 
-const getExpectedQuincenas = (enrollmentISO: string): number => {
+const getExpectedPayments = (enrollmentISO: string, frecuencia: string): number => {
+  if (frecuencia === 'unico') return 1;
+
   const start = new Date(enrollmentISO);
   const now = new Date();
   let count = 0;
-  const startM = start.getFullYear() * 12 + start.getMonth();
-  const endM = now.getFullYear() * 12 + now.getMonth();
-  for (let t = startM; t <= endM; t++) {
-    const y = Math.floor(t / 12);
-    const m = t % 12;
-    const d15 = new Date(y, m, 15);
-    if (d15 > start && d15 <= now) count++;
-    const lastDay = new Date(y, m + 1, 0).getDate();
-    const dLast = new Date(y, m, lastDay);
-    if (dLast > start && dLast <= now) count++;
+
+  if (frecuencia === 'semanal') {
+    let current = new Date(start);
+    const daysToMonday = (8 - current.getDay()) % 7 || 7;
+    current.setDate(current.getDate() + daysToMonday);
+    while (current <= now) { count++; current.setDate(current.getDate() + 7); }
+  } else if (frecuencia === 'quincenal') {
+    const startM = start.getFullYear() * 12 + start.getMonth();
+    const endM = now.getFullYear() * 12 + now.getMonth();
+    for (let t = startM; t <= endM; t++) {
+      const y = Math.floor(t / 12), m = t % 12;
+      const d15 = new Date(y, m, 15);
+      if (d15 > start && d15 <= now) count++;
+      const lastDay = new Date(y, m + 1, 0).getDate();
+      const dLast = new Date(y, m, lastDay);
+      if (dLast > start && dLast <= now) count++;
+    }
+  } else if (frecuencia === 'mensual') {
+    let current = new Date(start.getFullYear(), start.getMonth() + 1, 1);
+    while (current <= now) { count++; current.setMonth(current.getMonth() + 1); }
   }
   return count;
 };
 
 const getStudentStatus = (
   student: Student,
-  payments: Payment[]
+  payments: Payment[],
+  course: any
 ): { label: string; variant: 'success' | 'danger' | 'info' } => {
-  if (student.balancePendiente === 0) {
-    return { label: 'Pagado', variant: 'success' };
-  }
-  const expected = getExpectedQuincenas(student.fechaInscripcion);
-  if (expected === 0) {
-    return { label: 'Recién inscrito', variant: 'info' };
-  }
+  if (student.balancePendiente === 0) return { label: 'Pagado', variant: 'success' };
+  if (!course) return { label: 'Sin curso', variant: 'info' };
+  const expected = getExpectedPayments(student.fechaInscripcion, course.frecuenciaPago);
+  if (expected === 0) return { label: 'Recién inscrito', variant: 'info' };
   const totalPaid = payments
     .filter(p => p.estudianteId === student.id)
     .reduce((sum, p) => sum + p.montoPagado, 0);
-  const expectedMin = expected * 250;
-  if (totalPaid >= expectedMin) {
-    return { label: 'Al día', variant: 'success' };
-  }
+  const amountPerPeriod = getDefaultPaymentAmount(course);
+  const expectedMin = expected * amountPerPeriod;
+  if (totalPaid >= expectedMin) return { label: 'Al día', variant: 'success' };
   const deficit = expectedMin - totalPaid;
-  const cuotas = Math.ceil(deficit / 250);
+  const cuotas = Math.ceil(deficit / amountPerPeriod);
   return { label: `Atrasado (${cuotas} cuota${cuotas > 1 ? 's' : ''})`, variant: 'danger' };
 };
 
@@ -96,6 +149,7 @@ export const Payments: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [step, setStep] = useState<'form' | 'review'>('form');
 
   const [montoPagado, setMontoPagado] = useState(0);
   const [montoRecibido, setMontoRecibido] = useState(0);
@@ -128,17 +182,21 @@ export const Payments: React.FC = () => {
     : [];
 
   const totalPaid = studentPayments.reduce((sum, p) => sum + p.montoPagado, 0);
-  const courseCost = selectedCourse?.costo ?? 0;
-  const progressPct = courseCost > 0 ? Math.min(100, Math.round((totalPaid / courseCost) * 100)) : 0;
+  const totalCourseCost = getTotalCourseCost(selectedCourse);
+  const moduleCost = getModuleTotalCost(selectedCourse);
+  const progressPct = totalCourseCost > 0 ? Math.min(100, Math.round((totalPaid / totalCourseCost) * 100)) : 0;
 
   const handleSelectStudent = (student: Student) => {
     setSelectedStudent(student);
     setSearchTerm(student.nombreCompleto);
     setIsDropdownOpen(false);
-    setMontoPagado(250);
-    setMontoRecibido(250);
+    const course = courses.find((c) => c.id === student.cursoId);
+    const defaultAmount = getDefaultPaymentAmount(course);
+    setMontoPagado(defaultAmount);
+    setMontoRecibido(defaultAmount);
     setMetodoPago('efectivo');
     setReferenciaTransferencia('');
+    setStep('form');
     setError('');
   };
 
@@ -171,6 +229,15 @@ export const Payments: React.FC = () => {
       return;
     }
 
+    setStep('review');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleConfirmPayment = () => {
+    setError('');
+
+    if (!selectedStudent) return;
+
     try {
       const invoice = registerPayment(
         selectedStudent.id,
@@ -183,8 +250,10 @@ export const Payments: React.FC = () => {
       setIsInvoiceModalOpen(true);
       setTimeout(() => window.print(), 500);
       setSearchTerm('');
-      setMontoPagado(250);
-      setMontoRecibido(250);
+      setStep('form');
+      const defaultAmount = getDefaultPaymentAmount(selectedCourse || undefined);
+      setMontoPagado(defaultAmount);
+      setMontoRecibido(defaultAmount);
       setMetodoPago('efectivo');
       setReferenciaTransferencia('');
     } catch (err: any) {
@@ -326,7 +395,7 @@ export const Payments: React.FC = () => {
                 .slice(0, 10)
                 .map((s) => {
                   const course = courses.find((c) => c.id === s.cursoId);
-                  const status = getStudentStatus(s, payments);
+                  const status = getStudentStatus(s, payments, course);
                   return (
                     <button
                       key={s.id}
@@ -379,8 +448,8 @@ export const Payments: React.FC = () => {
                   <div className="flex flex-col gap-0.5">
                     <div className="flex items-center gap-2.5">
                       <span className="text-white font-black text-lg tracking-tight">{selectedStudent.nombreCompleto}</span>
-                      <Badge variant={getStudentStatus(selectedStudent, payments).variant} size="sm">
-                        {getStudentStatus(selectedStudent, payments).label}
+                      <Badge variant={getStudentStatus(selectedStudent, payments, selectedCourse || undefined).variant} size="sm">
+                        {getStudentStatus(selectedStudent, payments, selectedCourse || undefined).label}
                       </Badge>
                     </div>
                     <div className="flex items-center gap-2.5 text-sm text-slate-300 font-semibold">
@@ -401,8 +470,8 @@ export const Payments: React.FC = () => {
 
               <div className="grid grid-cols-3 divide-x divide-slate-100 border-t border-slate-50">
                 <div className="p-5 text-center">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Costo Curso</span>
-                  <div className="text-lg font-black text-slate-800 mt-1">{formatCurrency(courseCost)}</div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total del Curso</span>
+                  <div className="text-lg font-black text-slate-800 mt-1">{formatCurrency(totalCourseCost)}</div>
                 </div>
                 <div className="p-5 text-center">
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Pagado</span>
@@ -470,7 +539,7 @@ export const Payments: React.FC = () => {
                           </td>
                           <td className="py-3 pr-4 text-slate-500">
                             {p.fecha} <span className="text-slate-400">{p.hora}</span>
-                            <span className="block text-[10px] font-medium text-brand-500">{getQuincenaFromDate(p.fecha)}</span>
+                            <span className="block text-[10px] font-medium text-brand-500">{getPeriodLabel(p.fecha, selectedCourse?.frecuenciaPago)}</span>
                           </td>
                           <td className="py-3 pr-4">
                             <Badge variant={p.metodoPago === 'efectivo' ? 'success' : 'info'} size="sm">
@@ -504,108 +573,198 @@ export const Payments: React.FC = () => {
                     <Coins className="w-4.5 h-4.5" />
                   </div>
                   <div>
-                    <span className="text-white font-bold text-sm">Registrar Pago</span>
-                    <p className="text-emerald-100 text-[10px] font-semibold">Pago quincenal</p>
+                    <span className="text-white font-bold text-sm">
+                      {step === 'review' ? 'Confirmar Pago' : 'Registrar Pago'}
+                    </span>
+                    <p className="text-emerald-100 text-[10px] font-semibold">
+                      {selectedCourse ? `Pago ${getFrecuenciaLabel(selectedCourse.frecuenciaPago)}` : 'Seleccione un estudiante'}
+                    </p>
                   </div>
                 </div>
               </div>
 
-              <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-5">
-                {selectedStudent.balancePendiente === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-8 text-center">
-                    <CheckCircle2 className="w-10 h-10 text-emerald-300 mb-3" />
-                    <span className="text-sm font-bold text-emerald-700">¡Curso pagado!</span>
-                    <p className="text-xs text-slate-500 mt-1">Este estudiante no tiene balance pendiente.</p>
-                  </div>
-                ) : (
-                  <>
-                    {/* Current balance reminder */}
-                    <div className="p-3 bg-rose-50 border border-rose-100 rounded-xl flex items-center justify-between">
-                      <span className="text-xs font-bold text-rose-700">Balance pendiente</span>
-                      <span className="text-base font-black text-rose-600">{formatCurrency(selectedStudent.balancePendiente)}</span>
+              {step === 'review' ? (
+                /* Review Step */
+                <div className="p-6 flex flex-col gap-5">
+                  <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-50 to-brand-100 text-brand-600 flex items-center justify-center text-sm font-black shrink-0 border border-brand-200">
+                      {selectedStudent.nombreCompleto.charAt(0).toUpperCase()}
                     </div>
+                    <div className="flex flex-col">
+                      <span className="text-sm font-bold text-slate-800">{selectedStudent.nombreCompleto}</span>
+                      <span className="text-[10px] font-semibold text-slate-400">{selectedStudent.matricula}</span>
+                    </div>
+                  </div>
 
-                    <Select
-                      label="Método de Pago"
-                      value={metodoPago}
-                      onChange={(e) => setMetodoPago(e.target.value as 'efectivo' | 'transferencia')}
-                      options={[
-                        { value: 'efectivo', label: 'Efectivo' },
-                        { value: 'transferencia', label: 'Transferencia Bancaria' }
-                      ]}
-                    />
-
-                    <Input
-                      label="Monto a Cobrar ($)"
-                      type="number"
-                      value={montoPagado}
-                      onChange={(e) => setMontoPagado(Number(e.target.value))}
-                      placeholder="250"
-                      icon={<Coins className="w-4.5 h-4.5 text-slate-400" />}
-                      required
-                    />
-
-                    <Input
-                      label="Monto Recibido ($)"
-                      type="number"
-                      value={montoRecibido}
-                      onChange={(e) => setMontoRecibido(Number(e.target.value))}
-                      placeholder="250"
-                      icon={<Coins className="w-4.5 h-4.5 text-slate-400" />}
-                      required
-                    />
-
-                    {montoRecibido >= montoPagado && montoRecibido > 0 && (
-                      <div className={`p-3 rounded-xl flex items-center justify-between ${montoRecibido > montoPagado ? 'bg-amber-50 border border-amber-100' : 'bg-emerald-50 border border-emerald-100'}`}>
-                        <div className="flex items-center gap-2">
-                          <span className={`text-xs font-bold ${montoRecibido > montoPagado ? 'text-amber-700' : 'text-emerald-700'}`}>
-                            {montoRecibido > montoPagado ? 'Vuelta' : 'Pago exacto'}
-                          </span>
-                        </div>
-                        <span className={`text-base font-black ${montoRecibido > montoPagado ? 'text-amber-600' : 'text-emerald-600'}`}>
-                          {montoRecibido > montoPagado ? formatCurrency(montoRecibido - montoPagado) : '$0'}
-                        </span>
+                  <div className="flex flex-col gap-3 text-sm font-semibold text-slate-600">
+                    <div className="flex justify-between">
+                      <span>Curso</span>
+                      <span className="text-slate-800 font-bold text-right">{selectedCourse?.nombre || 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Frecuencia</span>
+                      <span className="text-slate-800 font-bold capitalize">{selectedCourse?.frecuenciaPago || 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Monto</span>
+                      <span className="text-emerald-600 font-extrabold">{formatCurrency(montoPagado)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Monto Recibido</span>
+                      <span className="text-slate-800 font-extrabold">{formatCurrency(montoRecibido)}</span>
+                    </div>
+                    {montoRecibido > montoPagado && (
+                      <div className="flex justify-between">
+                        <span>Vuelta</span>
+                        <span className="text-amber-600 font-extrabold">{formatCurrency(montoRecibido - montoPagado)}</span>
                       </div>
                     )}
+                    <div className="flex justify-between">
+                      <span>Método</span>
+                      <span className="text-slate-800 font-bold uppercase">{metodoPago}</span>
+                    </div>
+                    {metodoPago === 'transferencia' && referenciaTransferencia && (
+                      <div className="flex justify-between">
+                        <span>Referencia</span>
+                        <span className="text-slate-800 font-bold font-mono">{referenciaTransferencia}</span>
+                      </div>
+                    )}
+                  </div>
 
-                    {metodoPago === 'transferencia' && (
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-500">Nuevo Balance</span>
+                      <span className="text-lg font-black text-slate-800">
+                        {formatCurrency(Math.max(0, selectedStudent.balancePendiente - montoPagado))}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 pt-2">
+                    <Button variant="outline" type="button" icon={<ShieldCheck className="w-4 h-4" />} onClick={() => setStep('form')}>
+                      Editar
+                    </Button>
+                    <Button variant="success" size="lg" fullWidth icon={<Wallet className="w-4.5 h-4.5" />} onClick={handleConfirmPayment}>
+                      Confirmar Pago
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                /* Payment Form */
+                <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-5">
+                  {selectedStudent.balancePendiente === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-8 text-center">
+                      <CheckCircle2 className="w-10 h-10 text-emerald-300 mb-3" />
+                      <span className="text-sm font-bold text-emerald-700">¡Curso pagado!</span>
+                      <p className="text-xs text-slate-500 mt-1">Este estudiante no tiene balance pendiente.</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="p-3 bg-rose-50 border border-rose-100 rounded-xl flex items-center justify-between">
+                        <span className="text-xs font-bold text-rose-700">Balance pendiente</span>
+                        <span className="text-base font-black text-rose-600">{formatCurrency(selectedStudent.balancePendiente)}</span>
+                      </div>
+
+                      <Select
+                        label="Método de Pago"
+                        value={metodoPago}
+                        onChange={(e) => setMetodoPago(e.target.value as 'efectivo' | 'transferencia')}
+                        options={[
+                          { value: 'efectivo', label: 'Efectivo' },
+                          { value: 'transferencia', label: 'Transferencia Bancaria' }
+                        ]}
+                      />
+
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Monto a Cobrar ($)</label>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {selectedCourse && selectedCourse.frecuenciaPago !== 'unico' && (
+                            <button
+                              type="button"
+                              onClick={() => { const a = moduleCost; setMontoPagado(Math.min(a, selectedStudent.balancePendiente)); setMontoRecibido(Math.min(a, selectedStudent.balancePendiente)); }}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${montoPagado === Math.min(moduleCost, selectedStudent.balancePendiente) ? 'bg-brand-600 text-white shadow-sm' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                            >
+                              Módulo Completo ({formatCurrency(moduleCost)})
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => { setMontoPagado(selectedStudent.balancePendiente); setMontoRecibido(selectedStudent.balancePendiente); }}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${montoPagado === selectedStudent.balancePendiente ? 'bg-brand-600 text-white shadow-sm' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                          >
+                            Saldo Pendiente ({formatCurrency(selectedStudent.balancePendiente)})
+                          </button>
+                        </div>
+                        <input
+                          type="number"
+                          value={inputValue(montoPagado)}
+                          onChange={(e) => setMontoPagado(Number(e.target.value))}
+                          placeholder={getDefaultPaymentAmount(selectedCourse || undefined).toString()}
+                          className="w-full px-4 py-2.5 bg-white border border-slate-200 focus:ring-emerald-100 focus:border-emerald-500 rounded-xl text-slate-800 text-sm transition-all duration-200 focus:outline-hidden focus:ring-4 mt-1.5"
+                        />
+                      </div>
+
                       <Input
-                        label="Referencia de Transferencia"
-                        value={referenciaTransferencia}
-                        onChange={(e) => setReferenciaTransferencia(e.target.value)}
-                        placeholder="Nro. Aprobación / Código"
-                        icon={<Hash className="w-4.5 h-4.5 text-slate-400" />}
+                        label="Monto Recibido ($)"
+                        type="number"
+                        value={inputValue(montoRecibido)}
+                        onChange={(e) => setMontoRecibido(Number(e.target.value))}
+                        placeholder={montoPagado.toString()}
+                        icon={<Coins className="w-4.5 h-4.5 text-slate-400" />}
                         required
                       />
-                    )}
 
-                    {/* Preview new balance */}
-                    <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-bold text-slate-500">Nuevo balance</span>
-                        <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-600">
-                          <TrendingDown className="w-3.5 h-3.5" />
-                          <span>Reduce la deuda</span>
+                      {montoRecibido >= montoPagado && montoRecibido > 0 && (
+                        <div className={`p-3 rounded-xl flex items-center justify-between ${montoRecibido > montoPagado ? 'bg-amber-50 border border-amber-100' : 'bg-emerald-50 border border-emerald-100'}`}>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-xs font-bold ${montoRecibido > montoPagado ? 'text-amber-700' : 'text-emerald-700'}`}>
+                              {montoRecibido > montoPagado ? 'Vuelta' : 'Pago exacto'}
+                            </span>
+                          </div>
+                          <span className={`text-base font-black ${montoRecibido > montoPagado ? 'text-amber-600' : 'text-emerald-600'}`}>
+                            {montoRecibido > montoPagado ? formatCurrency(montoRecibido - montoPagado) : '$0'}
+                          </span>
+                        </div>
+                      )}
+
+                      {metodoPago === 'transferencia' && (
+                        <Input
+                          label="Referencia de Transferencia"
+                          value={referenciaTransferencia}
+                          onChange={(e) => setReferenciaTransferencia(e.target.value)}
+                          placeholder="Nro. Aprobación / Código"
+                          icon={<Hash className="w-4.5 h-4.5 text-slate-400" />}
+                          required
+                        />
+                      )}
+
+                      <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-bold text-slate-500">Nuevo balance</span>
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-600">
+                            <TrendingDown className="w-3.5 h-3.5" />
+                            <span>Reduce la deuda</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-lg font-black text-slate-800">
+                            {formatCurrency(Math.max(0, selectedStudent.balancePendiente - montoPagado))}
+                          </span>
+                          {montoPagado > 0 && (
+                            <span className="text-xs font-bold text-slate-400">
+                              {progressPct}% → {totalCourseCost > 0 ? Math.min(100, Math.round(((totalPaid + montoPagado) / totalCourseCost) * 100)) : 0}%
+                            </span>
+                          )}
                         </div>
                       </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-lg font-black text-slate-800">
-                          {formatCurrency(Math.max(0, selectedStudent.balancePendiente - montoPagado))}
-                        </span>
-                        {montoPagado > 0 && (
-                          <span className="text-xs font-bold text-slate-400">
-                            {progressPct}% → {courseCost > 0 ? Math.min(100, Math.round(((totalPaid + montoPagado) / courseCost) * 100)) : 0}%
-                          </span>
-                        )}
-                      </div>
-                    </div>
 
-                    <Button variant="success" type="submit" size="lg" fullWidth icon={<Wallet className="w-4.5 h-4.5" />}>
-                      Registrar Pago e Imprimir
-                    </Button>
-                  </>
-                )}
-              </form>
+                      <Button variant="success" type="submit" size="lg" fullWidth icon={<CheckCircle2 className="w-4.5 h-4.5" />}>
+                        Revisar Pago
+                      </Button>
+                    </>
+                  )}
+                </form>
+              )}
             </div>
           </div>
         </div>
