@@ -23,8 +23,8 @@ import {
   ArrowRight
 } from 'lucide-react';
 import html2pdf from 'html2pdf.js';
-import { formatCurrency, inputValue, getTotalCourseCost } from '../utils/formatters';
-import type { Student, Payment } from '../types';
+import { formatCurrency, inputValue, getTotalCourseCost, formatDateStr } from '../utils/formatters';
+import type { Student, Payment, Cuota } from '../types';
 
 // ==========================================
 // ==========================================
@@ -41,14 +41,7 @@ const getDefaultPaymentAmount = (course: { costo: number } | null | undefined): 
   return course.costo;
 };
 
-const getNextDueDate = (): Date => {
-  const now = new Date();
-  if (now.getDate() <= 15) return new Date(now.getFullYear(), now.getMonth(), 15);
-  return new Date(now.getFullYear(), now.getMonth() + 1, 0);
-};
-
-const getNextDueDateLabel = (): string => {
-  const d = getNextDueDate();
+const formatFecha = (d: Date): string => {
   const months = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
   return `${d.getDate()} de ${months[d.getMonth()]} ${d.getFullYear()}`;
 };
@@ -65,58 +58,26 @@ const getPeriodLabel = (dateStr: string, frecuencia: string = 'quincenal'): stri
   return 'Pago único';
 };
 
-const getExpectedPayments = (enrollmentISO: string, frecuencia: string): number => {
-  if (frecuencia === 'unico') return 1;
-
-  const start = new Date(enrollmentISO);
-  const now = new Date();
-  let count = 0;
-
-  if (frecuencia === 'semanal') {
-    let current = new Date(start);
-    const daysToMonday = (8 - current.getDay()) % 7 || 7;
-    current.setDate(current.getDate() + daysToMonday);
-    while (current <= now) { count++; current.setDate(current.getDate() + 7); }
-  } else if (frecuencia === 'quincenal') {
-    const startM = start.getFullYear() * 12 + start.getMonth();
-    const endM = now.getFullYear() * 12 + now.getMonth();
-    for (let t = startM; t <= endM; t++) {
-      const y = Math.floor(t / 12), m = t % 12;
-      const d15 = new Date(y, m, 15);
-      if (d15 > start && d15 <= now) count++;
-      const lastDay = new Date(y, m + 1, 0).getDate();
-      const dLast = new Date(y, m, lastDay);
-      if (dLast > start && dLast <= now) count++;
-    }
-  } else if (frecuencia === 'mensual') {
-    let current = new Date(start.getFullYear(), start.getMonth() + 1, 1);
-    while (current <= now) { count++; current.setMonth(current.getMonth() + 1); }
-  }
-  return count;
-};
-
 const getStudentStatus = (
   student: Student,
-  payments: Payment[],
-  course: { frecuenciaPago: string; costo: number } | null | undefined
+  cuotas: Cuota[]
 ): { label: string; variant: 'success' | 'danger' | 'info' } => {
   if (student.balancePendiente === 0) return { label: 'Pagado', variant: 'success' };
-  if (!course) return { label: 'Sin curso', variant: 'info' };
-  const expected = getExpectedPayments(student.fechaInscripcion, course.frecuenciaPago);
-  if (expected === 0) return { label: 'Recién inscrito', variant: 'info' };
-  const totalPaid = payments
-    .filter(p => p.estudianteId === student.id)
-    .reduce((sum, p) => sum + (p.esAnulacion ? -p.montoPagado : p.montoPagado), 0);
-  const amountPerPeriod = getDefaultPaymentAmount(course);
-  const expectedMin = expected * amountPerPeriod;
-  if (totalPaid >= expectedMin) return { label: 'Al día', variant: 'success' };
-  const deficit = expectedMin - totalPaid;
-  const cuotas = Math.ceil(deficit / amountPerPeriod);
-  return { label: `Atrasado (${cuotas} cuota${cuotas > 1 ? 's' : ''})`, variant: 'danger' };
+  const studentCuotas = cuotas.filter((c) => c.estudianteId === student.id);
+  if (studentCuotas.length === 0) return { label: 'Sin cuotas', variant: 'info' };
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const vencidas = studentCuotas.filter((c) => {
+    if (c.estado !== 'pendiente') return false;
+    const venc = new Date(c.fechaVencimiento + 'T00:00:00');
+    return venc < today;
+  });
+  if (vencidas.length === 0) return { label: 'Al día', variant: 'success' };
+  return { label: `Atrasado (${vencidas.length} cuota${vencidas.length > 1 ? 's' : ''})`, variant: 'danger' };
 };
 
 export const Payments: React.FC = () => {
-  const { students, courses, payments, registerPayment, anularPago } = useAcademyStore();
+  const { students, courses, payments, registerPayment, anularPago, cuotas } = useAcademyStore();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
@@ -171,6 +132,22 @@ export const Payments: React.FC = () => {
   const totalPaid = studentPayments.reduce((sum, p) => sum + (p.esAnulacion ? -p.montoPagado : p.montoPagado), 0);
   const totalCourseCost = getTotalCourseCost(selectedCourse);
   const progressPct = totalCourseCost > 0 ? Math.min(100, Math.round((totalPaid / totalCourseCost) * 100)) : 0;
+
+  const studentCuotas = selectedStudent
+    ? cuotas
+        .filter((c) => c.estudianteId === selectedStudent.id)
+        .sort((a, b) => a.numero - b.numero)
+    : [];
+
+  const nextPendingCuota = studentCuotas.find((c) => c.estado === 'pendiente') ?? null;
+
+  const nextDueDateLabel = nextPendingCuota
+    ? formatFecha(new Date(nextPendingCuota.fechaVencimiento + 'T00:00:00'))
+    : 'Curso pagado';
+
+  const totalPendingCuotas = studentCuotas.filter((c) => c.estado === 'pendiente').length;
+
+  const getStatus = (student: Student) => getStudentStatus(student, cuotas);
 
   const handleSelectStudent = (student: Student) => {
     setSelectedStudent(student);
@@ -365,7 +342,12 @@ export const Payments: React.FC = () => {
         </div>
       </Card>
 
-      {/* Next Due Banner */}
+      {/* Earliest next due across all students */}
+      {(() => {
+        const earliestCuota = cuotas
+          .filter((c) => c.estado === 'pendiente')
+          .sort((a, b) => a.fechaVencimiento.localeCompare(b.fechaVencimiento))[0];
+        return (
       <Card className="no-print">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -373,7 +355,11 @@ export const Payments: React.FC = () => {
               <Calendar className="w-5 h-5" />
             </div>
             <div>
-              <span className="text-sm font-bold text-slate-700">Próximo vencimiento: {getNextDueDateLabel()}</span>
+              <span className="text-sm font-bold text-slate-700">
+                {earliestCuota
+                  ? `Próximo vencimiento: ${formatFecha(new Date(earliestCuota.fechaVencimiento + 'T00:00:00'))}`
+                  : 'No hay cuotas pendientes'}
+              </span>
               <p className="text-xs font-semibold text-slate-400 mt-0.5">
                 {students.filter(s => s.balancePendiente > 0).length} estudiantes con balance pendiente
               </p>
@@ -386,6 +372,8 @@ export const Payments: React.FC = () => {
           </div>
         </div>
       </Card>
+        );
+      })()}
 
       {/* Pending students list when no student selected */}
       {!selectedStudent && (
@@ -401,7 +389,7 @@ export const Payments: React.FC = () => {
                 .slice(0, 10)
                 .map((s) => {
                   const courseData = s.cursoSnapshot ?? courses.find((c) => c.id === s.cursoId);
-                  const status = getStudentStatus(s, payments, courseData);
+                  const status = getStatus(s);
                   return (
                     <button
                       key={s.id}
@@ -454,8 +442,8 @@ export const Payments: React.FC = () => {
                   <div className="flex flex-col gap-0.5">
                     <div className="flex items-center gap-2.5">
                       <span className="text-white font-black text-lg tracking-tight">{selectedStudent.nombreCompleto}</span>
-                      <Badge variant={getStudentStatus(selectedStudent, payments, selectedCourse || undefined).variant} size="sm">
-                        {getStudentStatus(selectedStudent, payments, selectedCourse || undefined).label}
+                      <Badge variant={getStatus(selectedStudent).variant} size="sm">
+                        {getStatus(selectedStudent).label}
                       </Badge>
                     </div>
                     <div className="flex items-center gap-2.5 text-sm text-slate-300 font-semibold">
@@ -623,6 +611,53 @@ export const Payments: React.FC = () => {
                 </div>
               )}
             </Card>
+
+            {/* Cuotas Table */}
+            <Card title="Calendario de Cuotas" subtitle={`${totalPendingCuotas} pendiente(s) · ${studentCuotas.length - totalPendingCuotas} pagada(s)`}>
+              {studentCuotas.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-8 text-center text-slate-400">
+                  <Calendar className="w-8 h-8 text-slate-200 mb-2" />
+                  <span className="text-xs font-bold">No hay cuotas generadas</span>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="border-b border-slate-100">
+                      <tr className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        <th className="pb-3 pr-4">#</th>
+                        <th className="pb-3 pr-4">Vencimiento</th>
+                        <th className="pb-3 pr-4">Monto</th>
+                        <th className="pb-3 pr-4">Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {studentCuotas.map((c) => {
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        const venc = new Date(c.fechaVencimiento + 'T00:00:00');
+                        const isVencida = c.estado === 'pendiente' && venc < today;
+                        return (
+                          <tr key={c.id} className={`text-xs font-semibold ${isVencida ? 'bg-red-50/40' : c.estado === 'pagada' ? 'bg-emerald-50/30' : ''}`}>
+                            <td className="py-2.5 pr-4 font-mono font-bold text-slate-800">#{c.numero}</td>
+                            <td className="py-2.5 pr-4 text-slate-600">{formatDateStr(c.fechaVencimiento)}</td>
+                            <td className="py-2.5 pr-4 font-extrabold text-slate-800">{formatCurrency(c.monto)}</td>
+                            <td className="py-2.5 pr-4">
+                              {c.estado === 'pagada' ? (
+                                <Badge variant="success" size="sm">Pagada</Badge>
+                              ) : isVencida ? (
+                                <Badge variant="danger" size="sm">Vencida</Badge>
+                              ) : (
+                                <Badge variant="info" size="sm">Pendiente</Badge>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card>
           </div>
 
           {/* Right: Payment Form */}
@@ -638,7 +673,11 @@ export const Payments: React.FC = () => {
                       {step === 'review' ? 'Confirmar Pago' : 'Registrar Pago'}
                     </span>
                     <p className="text-emerald-100 text-[10px] font-semibold">
-                      {selectedCourse ? `Pago ${getFrecuenciaLabel(selectedCourse.frecuenciaPago)}` : 'Seleccione un estudiante'}
+                      {selectedCourse
+                        ? nextPendingCuota
+                          ? `Cuota #${nextPendingCuota.numero} · Vence ${formatDateStr(nextPendingCuota.fechaVencimiento)}`
+                          : `Pago ${getFrecuenciaLabel(selectedCourse.frecuenciaPago)}`
+                        : 'Seleccione un estudiante'}
                     </p>
                   </div>
                 </div>
@@ -666,6 +705,20 @@ export const Payments: React.FC = () => {
                       <span>Frecuencia</span>
                       <span className="text-slate-800 font-bold capitalize">{selectedCourse?.frecuenciaPago || 'N/A'}</span>
                     </div>
+                    {(() => {
+                      const costo = selectedCourse?.costo ?? 0;
+                      const cuotasACubrir = costo > 0 ? Math.floor(montoPagado / costo) : 0;
+                      if (cuotasACubrir > 0 && nextPendingCuota) {
+                        const last = nextPendingCuota.numero + cuotasACubrir - 1;
+                        return (
+                          <div className="flex justify-between">
+                            <span>Cuotas a cubrir</span>
+                            <span className="text-slate-800 font-bold">#{nextPendingCuota.numero}{cuotasACubrir > 1 ? ` - #${last}` : ''}</span>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
                     <div className="flex justify-between">
                       <span>Monto</span>
                       <span className="text-emerald-600 font-extrabold">{formatCurrency(montoPagado)}</span>
@@ -863,7 +916,19 @@ export const Payments: React.FC = () => {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500">Concepto:</span>
-                    <span className="text-slate-800 font-bold text-right">Pago quincenal</span>
+                    <span className="text-slate-800 font-bold text-right">
+                      {(() => {
+                        if (generatedInvoice.esAnulacion) return 'Anulación de pago';
+                        const cuotasDeEstePago = cuotas.filter((c) => c.pagoId === generatedInvoice.id);
+                        if (cuotasDeEstePago.length > 0) {
+                          const first = cuotasDeEstePago[0].numero;
+                          const last = cuotasDeEstePago[cuotasDeEstePago.length - 1].numero;
+                          return `Pago cuotas #${first}${first !== last ? `-#${last}` : ''}`;
+                        }
+                        if (generatedInvoice.costoInscripcion && generatedInvoice.costoInscripcion > 0) return 'Pago de inscripción';
+                        return 'Pago';
+                      })()}
+                    </span>
                   </div>
                 </div>
 
@@ -898,7 +963,7 @@ export const Payments: React.FC = () => {
                   <div className="flex justify-between items-center pt-1 border-t border-slate-100">
                     <span className="text-slate-500 font-bold">Próximo Pago</span>
                     <span className={`font-extrabold ${generatedInvoice.balance === 0 ? 'text-emerald-600' : 'text-slate-800'}`}>
-                      {generatedInvoice.balance === 0 ? 'Curso pagado' : getNextDueDateLabel()}
+                      {generatedInvoice.balance === 0 ? 'Curso pagado' : nextDueDateLabel}
                     </span>
                   </div>
                 </div>

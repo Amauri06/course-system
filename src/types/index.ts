@@ -82,6 +82,16 @@ export interface CashClosure {
   fechaCierre?: string; // ISO string de cuándo se realizó el cierre
 }
 
+export interface Cuota {
+  id: string;
+  estudianteId: string;
+  numero: number; // 1-based
+  fechaVencimiento: string; // YYYY-MM-DD
+  monto: number;
+  estado: 'pendiente' | 'pagada';
+  pagoId?: string; // FAC-XXXX si está pagada
+}
+
 export interface DashboardStats {
   estudiantesInscritos: number;
   ingresosDia: number;

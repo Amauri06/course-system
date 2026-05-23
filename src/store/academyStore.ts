@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import type { Course, Teacher, Student, Payment, CashClosure } from '../types';
+import type { Course, Teacher, Student, Payment, CashClosure, Cuota } from '../types';
 import { dbService } from '../services/db.service';
 import { format } from 'date-fns';
 
@@ -17,6 +17,7 @@ interface AcademyState {
   students: Student[];
   payments: Payment[];
   closures: CashClosure[];
+  cuotas: Cuota[];
   activeAdapter: 'localStorage' | 'supabase';
 
   // Configuración del Sistema
@@ -71,6 +72,10 @@ interface AcademyState {
   closeActiveClosure: () => void;
   reopenClosure: () => void;
   updateSaldoInicial: (fecha: string, monto: number) => void;
+
+  // Sistema de Cuotas
+  getCuotasEstudiante: (estudianteId: string) => Cuota[];
+  getNextCuotaPendiente: (estudianteId: string) => Cuota | null;
   
   // Configuración del Adaptador
   changePersistenceAdapter: (type: 'localStorage' | 'supabase') => void;
@@ -86,6 +91,97 @@ interface AcademyState {
 const getTodayDateStr = () => format(new Date(), 'yyyy-MM-dd');
 const getCurrentTimeStr = () => format(new Date(), 'HH:mm');
 
+// ==========================================
+// GENERACIÓN DE CALENDARIO DE CUOTAS
+// ==========================================
+const formatDateStr = (d: Date): string => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+const generarCalendarioCuotas = (
+  estudianteId: string,
+  fechaInscripcion: Date,
+  frecuenciaPago: string,
+  costo: number,
+  duracionModuloMeses: number,
+  modulos: number
+): Cuota[] => {
+  const cuotas: Cuota[] = [];
+
+  const getIntervalDays = (f: string): number => {
+    switch (f) {
+      case 'semanal': return 7;
+      case 'quincenal': return 15;
+      case 'mensual': return 30;
+      default: return 15;
+    }
+  };
+
+  let totalPeriods: number;
+  if (frecuenciaPago === 'unico') {
+    totalPeriods = 1;
+  } else {
+    const intervalDays = getIntervalDays(frecuenciaPago);
+    const totalMonths = duracionModuloMeses * modulos;
+    totalPeriods = (totalMonths * 30) / intervalDays;
+  }
+
+  for (let i = 0; i < totalPeriods; i++) {
+    let vencimiento: Date;
+
+    if (frecuenciaPago === 'unico') {
+      vencimiento = new Date(fechaInscripcion);
+    } else if (frecuenciaPago === 'semanal') {
+      if (i === 0) {
+        vencimiento = new Date(fechaInscripcion);
+        const daysToMonday = (8 - vencimiento.getDay()) % 7 || 7;
+        vencimiento.setDate(vencimiento.getDate() + daysToMonday);
+      } else {
+        vencimiento = new Date(cuotas[i - 1].fechaVencimiento + 'T00:00:00');
+        vencimiento.setDate(vencimiento.getDate() + 7);
+      }
+    } else if (frecuenciaPago === 'quincenal') {
+      if (i === 0) {
+        const day = fechaInscripcion.getDate();
+        if (day <= 15) {
+          vencimiento = new Date(fechaInscripcion.getFullYear(), fechaInscripcion.getMonth(), 15);
+        } else {
+          vencimiento = new Date(fechaInscripcion.getFullYear(), fechaInscripcion.getMonth() + 1, 0);
+        }
+      } else {
+        const prev = new Date(cuotas[i - 1].fechaVencimiento + 'T00:00:00');
+        const prevDay = prev.getDate();
+        if (prevDay <= 15) {
+          vencimiento = new Date(prev.getFullYear(), prev.getMonth() + 1, 0);
+        } else {
+          vencimiento = new Date(prev.getFullYear(), prev.getMonth() + 1, 15);
+        }
+      }
+    } else {
+      if (i === 0) {
+        vencimiento = new Date(fechaInscripcion.getFullYear(), fechaInscripcion.getMonth() + 1, 1);
+      } else {
+        vencimiento = new Date(cuotas[i - 1].fechaVencimiento + 'T00:00:00');
+        vencimiento.setMonth(vencimiento.getMonth() + 1);
+      }
+    }
+
+    cuotas.push({
+      id: `cuota-${estudianteId}-${i + 1}`,
+      estudianteId,
+      numero: i + 1,
+      fechaVencimiento: formatDateStr(vencimiento),
+      monto: costo,
+      estado: 'pendiente',
+    });
+  }
+
+  return cuotas;
+};
+
 export const useAcademyStore = create<AcademyState>()(
   persist(
     (set, get) => ({
@@ -94,6 +190,7 @@ export const useAcademyStore = create<AcademyState>()(
       students: [],
       payments: [],
       closures: [],
+      cuotas: [],
       activeAdapter: 'localStorage',
       config: {
         horarios: [
@@ -303,6 +400,16 @@ export const useAcademyStore = create<AcademyState>()(
           }
         };
 
+        // 2b. Generar calendario de cuotas
+        const nuevasCuotas = generarCalendarioCuotas(
+          studentId,
+          new Date(),
+          course.frecuenciaPago,
+          course.costo,
+          course.duracionModuloMeses || 1,
+          course.modulos
+        );
+
         // 3. Crear pago de inscripción si aplica
         let nuevoPago: Payment | null = null;
 
@@ -353,11 +460,13 @@ export const useAcademyStore = create<AcademyState>()(
           set({
             students: [...updatedState.students, nuevoEstudiante],
             payments: [...updatedState.payments, nuevoPago!],
-            closures: closureUpdated
+            closures: closureUpdated,
+            cuotas: [...updatedState.cuotas, ...nuevasCuotas]
           });
         } else {
           set({
-            students: [...state.students, nuevoEstudiante]
+            students: [...state.students, nuevoEstudiante],
+            cuotas: [...state.cuotas, ...nuevasCuotas]
           });
         }
 
@@ -385,12 +494,26 @@ export const useAcademyStore = create<AcademyState>()(
         }
 
         const course = state.courses.find((c) => c.id === student.cursoId);
+        const costoPorCuota = student.cursoSnapshot?.costo ?? course?.costo ?? 0;
         const nuevoBalance = Math.max(0, student.balancePendiente - montoPagado);
 
         // 1. Crear Registro de Factura / Pago
         const invoiceCount = state.payments.length + 1;
         const invoiceId = `FAC-${1000 + invoiceCount}`;
         const courseName = student.cursoSnapshot?.nombre ?? course?.nombre ?? '';
+
+        // 1a. Aplicar pago a cuotas pendientes más antiguas
+        const cuotasEstudiante = state.cuotas
+          .filter((c) => c.estudianteId === studentId && c.estado === 'pendiente')
+          .sort((a, b) => a.numero - b.numero);
+        const cuotasACubrir = costoPorCuota > 0 ? Math.floor(montoPagado / costoPorCuota) : 0;
+        const cuotasPagadas = cuotasEstudiante.slice(0, cuotasACubrir);
+        const updatedCuotas = state.cuotas.map((c) =>
+          cuotasPagadas.find((cp) => cp.id === c.id)
+            ? { ...c, estado: 'pagada' as const, pagoId: invoiceId }
+            : c
+        );
+
         const nuevoPago: Payment = {
           id: invoiceId,
           matricula: student.matricula,
@@ -436,7 +559,8 @@ export const useAcademyStore = create<AcademyState>()(
         set({
           students: updatedStudents,
           payments: [...state.payments, nuevoPago],
-          closures: updatedClosures
+          closures: updatedClosures,
+          cuotas: updatedCuotas
         });
 
         return nuevoPago;
@@ -492,6 +616,13 @@ export const useAcademyStore = create<AcademyState>()(
           s.id === pagoOriginal.estudianteId ? { ...s, balancePendiente: nuevoBalance } : s
         );
 
+        // Revertir cuotas asociadas al pago original
+        const updatedCuotas = state.cuotas.map((c) =>
+          c.pagoId === pagoOriginalId
+            ? { ...c, estado: 'pendiente' as const, pagoId: undefined }
+            : c
+        );
+
         // Actualizar cierre de caja (restar el monto)
         const todayDate = getTodayDateStr();
         const updatedClosures = state.closures.map((closure) => {
@@ -513,6 +644,7 @@ export const useAcademyStore = create<AcademyState>()(
           students: updatedStudents,
           payments: [...state.payments, anulacion],
           closures: updatedClosures,
+          cuotas: updatedCuotas,
         });
 
         return anulacion;
@@ -588,6 +720,22 @@ export const useAcademyStore = create<AcademyState>()(
             closure.fecha === fecha ? { ...closure, saldoInicial: monto } : closure
           )
         }));
+      },
+
+      // ==========================================
+      // CONSULTAS DE CUOTAS
+      // ==========================================
+      getCuotasEstudiante: (estudianteId) => {
+        return get().cuotas
+          .filter((c) => c.estudianteId === estudianteId)
+          .sort((a, b) => a.numero - b.numero);
+      },
+
+      getNextCuotaPendiente: (estudianteId) => {
+        const cuotas = get().cuotas
+          .filter((c) => c.estudianteId === estudianteId && c.estado === 'pendiente')
+          .sort((a, b) => a.numero - b.numero);
+        return cuotas.length > 0 ? cuotas[0] : null;
       }
     }),
     {
