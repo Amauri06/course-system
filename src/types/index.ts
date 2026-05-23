@@ -36,6 +36,14 @@ export interface Student {
   horario: string;
   inscripcionGratis: boolean;
   costoInscripcion: number; // Monto pagado por la inscripción (0 si gratis)
+  cursoSnapshot?: {
+    costo: number;
+    frecuenciaPago: string;
+    duracionModuloMeses: number;
+    modulos: number;
+    nombre: string;
+    tipoPeriodoAcademico?: string;
+  };
 }
 
 export interface Payment {

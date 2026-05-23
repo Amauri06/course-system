@@ -6,7 +6,7 @@ import { Modal } from '../components/ui/Modal';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { Edit, Trash2, ShieldAlert, Search, Printer } from 'lucide-react';
-import { formatCurrency, formatDateStr, inputValue } from '../utils/formatters';
+import { formatCurrency, formatDateStr } from '../utils/formatters';
 import { z } from 'zod';
 import { differenceInYears } from 'date-fns';
 
@@ -18,8 +18,7 @@ export const getStudentUpdateSchema = (courses: any[]) => {
     direccion: z.string().optional(),
     cedula: z.string().optional(),
     cursoId: z.string().min(1, 'El curso es obligatorio.'),
-    horario: z.string().min(1, 'El horario es obligatorio.'),
-    balancePendiente: z.number().min(0, 'El balance no puede ser negativo.')
+    horario: z.string().min(1, 'El horario es obligatorio.')
   }).superRefine((data, ctx) => {
     const birthDate = new Date(data.fechaNacimiento);
     if (isNaN(birthDate.getTime())) {
@@ -64,7 +63,6 @@ export const Students: React.FC = () => {
   const [direccion, setDireccion] = useState('');
   const [cursoId, setCursoId] = useState('');
   const [horario, setHorario] = useState('');
-  const [balancePendiente, setBalancePendiente] = useState(0);
   const [error, setError] = useState('');
 
   // Filtrar estudiantes
@@ -88,7 +86,6 @@ export const Students: React.FC = () => {
     setFechaNacimiento(student.fechaNacimiento || '');
     setCursoId(student.cursoId);
     setHorario(student.horario || '');
-    setBalancePendiente(student.balancePendiente);
     setError('');
     setIsModalOpen(true);
   };
@@ -103,8 +100,7 @@ export const Students: React.FC = () => {
       direccion,
       cedula,
       cursoId,
-      horario,
-      balancePendiente: Number(balancePendiente)
+      horario
     });
 
     if (!validationResult.success) {
@@ -121,8 +117,7 @@ export const Students: React.FC = () => {
         cedula,
         direccion,
         cursoId,
-        horario,
-        balancePendiente: Number(balancePendiente)
+        horario
       });
     }
     setIsModalOpen(false);
@@ -327,7 +322,7 @@ export const Students: React.FC = () => {
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Select
               label="Programa *"
               value={cursoId}
@@ -344,14 +339,16 @@ export const Students: React.FC = () => {
                 { value: '2:00 pm - 5:00 pm', label: 'Tarde (2:00pm-5:00pm)' }
               ]}
             />
-            <Input
-              label="Balance Pendiente ($) *"
-              type="number"
-              value={inputValue(balancePendiente)}
-              onChange={(e) => setBalancePendiente(Number(e.target.value))}
-              placeholder="0"
-              required
-            />
+          </div>
+
+          <div className="p-4 bg-gradient-to-br from-amber-50 to-amber-100 border border-amber-200 rounded-xl flex items-center justify-between">
+            <div className="flex flex-col">
+              <span className="text-[10px] font-extrabold text-amber-700 uppercase tracking-widest">Balance Pendiente</span>
+              <span className="text-xs font-semibold text-amber-600 mt-0.5">Este valor se gestiona desde Cobros</span>
+            </div>
+            <span className={`text-xl font-black ${editingStudent?.balancePendiente > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+              {formatCurrency(editingStudent?.balancePendiente ?? 0)}
+            </span>
           </div>
 
           <div className="flex flex-col gap-1.5">

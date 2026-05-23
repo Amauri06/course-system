@@ -754,7 +754,7 @@ export const Enroll: React.FC = () => {
 
       {/* Modal de Confirmación de Inscripción */}
       {enrolledStudent && (() => {
-        const course = courses.find((c) => c.id === enrolledStudent.cursoId);
+        const courseData = enrolledStudent.cursoSnapshot ?? courses.find((c) => c.id === enrolledStudent.cursoId);
         return (
           <Modal
             isOpen={isConfirmModalOpen}
@@ -802,7 +802,7 @@ export const Enroll: React.FC = () => {
 
                     <div className="flex justify-between mt-1">
                       <span className="text-slate-500">Curso Inscrito:</span>
-                      <span className="text-slate-800 font-bold text-right">{course?.nombre || 'N/A'}</span>
+                      <span className="text-slate-800 font-bold text-right">{(courseData as any)?.nombre || 'N/A'}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-500">Horario Asignado:</span>
@@ -853,8 +853,8 @@ export const Enroll: React.FC = () => {
                     <div className="flex justify-between items-center p-3 bg-gradient-to-r from-slate-800 to-slate-900 text-white rounded-xl shadow-md">
                       <div className="flex flex-col">
                         <span className="uppercase text-[10px] font-black tracking-widest text-slate-300">Mensualidades (pendiente en Cobros)</span>
-                        {course && (
-                          <span className="text-[9px] text-slate-400 font-semibold mt-0.5">{formatCurrency(course.costo)} × {course.modulos} módulos</span>
+                        {courseData && (
+                          <span className="text-[9px] text-slate-400 font-semibold mt-0.5">{formatCurrency((courseData as any).costo)} × {(courseData as any).modulos} módulos</span>
                         )}
                       </div>
                       <span className={printMode === 'ticket' ? 'text-lg font-black text-white' : 'text-xl font-black text-white'}>{formatCurrency(enrolledStudent.balancePendiente)}</span>

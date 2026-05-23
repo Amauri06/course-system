@@ -60,15 +60,6 @@ const getTotalCourseCost = (course: any): number => {
   return course.costo * totalPeriods;
 };
 
-const getModuleTotalCost = (course: any): number => {
-  if (!course) return 0;
-  if (course.frecuenciaPago === 'unico') return course.costo;
-  const intervalDays = getIntervalDays(course.frecuenciaPago);
-  const monthsPerModule = course.duracionModuloMeses || 1;
-  const periodsPerModule = (monthsPerModule * 30) / intervalDays;
-  return course.costo * periodsPerModule;
-};
-
 const getNextDueDate = (): Date => {
   const now = new Date();
   if (now.getDate() <= 15) return new Date(now.getFullYear(), now.getMonth(), 15);
@@ -171,8 +162,13 @@ export const Payments: React.FC = () => {
     );
   });
 
-  const selectedCourse = selectedStudent
-    ? courses.find((c) => c.id === selectedStudent.cursoId)
+  // Lee el estudiante más reciente del store (balance se actualiza tras pagar)
+  const currentStudent = selectedStudent
+    ? students.find((s) => s.id === selectedStudent.id) ?? selectedStudent
+    : null;
+
+  const selectedCourse = currentStudent
+    ? (currentStudent.cursoSnapshot ?? courses.find((c) => c.id === currentStudent.cursoId))
     : null;
 
   const studentPayments = selectedStudent
@@ -183,15 +179,13 @@ export const Payments: React.FC = () => {
 
   const totalPaid = studentPayments.reduce((sum, p) => sum + p.montoPagado, 0);
   const totalCourseCost = getTotalCourseCost(selectedCourse);
-  const moduleCost = getModuleTotalCost(selectedCourse);
   const progressPct = totalCourseCost > 0 ? Math.min(100, Math.round((totalPaid / totalCourseCost) * 100)) : 0;
 
   const handleSelectStudent = (student: Student) => {
     setSelectedStudent(student);
     setSearchTerm(student.nombreCompleto);
     setIsDropdownOpen(false);
-    const course = courses.find((c) => c.id === student.cursoId);
-    const defaultAmount = getDefaultPaymentAmount(course);
+    const defaultAmount = getDefaultPaymentAmount(student.cursoSnapshot ?? courses.find((c) => c.id === student.cursoId));
     setMontoPagado(defaultAmount);
     setMontoRecibido(defaultAmount);
     setMetodoPago('efectivo');
@@ -214,8 +208,8 @@ export const Payments: React.FC = () => {
       return;
     }
 
-    if (montoPagado > selectedStudent.balancePendiente) {
-      setError(`El monto no puede exceder el balance pendiente (${formatCurrency(selectedStudent.balancePendiente)}).`);
+    if (montoPagado > currentStudent!.balancePendiente) {
+      setError(`El monto no puede exceder el balance pendiente (${formatCurrency(currentStudent!.balancePendiente)}).`);
       return;
     }
 
@@ -320,7 +314,7 @@ export const Payments: React.FC = () => {
               <div className="absolute top-[104px] left-0 right-0 z-50 mt-1 max-h-72 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-lg p-1.5">
                 {filteredStudents.length > 0 ? (
                   filteredStudents.map((s) => {
-                    const course = courses.find((c) => c.id === s.cursoId);
+                    const courseName = s.cursoSnapshot?.nombre ?? courses.find((c) => c.id === s.cursoId)?.nombre;
                     return (
                       <button
                         key={s.id}
@@ -336,7 +330,7 @@ export const Payments: React.FC = () => {
                           <div className="text-[10px] font-semibold text-slate-400 flex items-center gap-2">
                             <span>{s.matricula}</span>
                             <span>•</span>
-                            <span>{course?.nombre || 'N/A'}</span>
+                            <span>{courseName || 'N/A'}</span>
                           </div>
                         </div>
                         <div className="text-right shrink-0">
@@ -394,8 +388,8 @@ export const Payments: React.FC = () => {
                 .sort((a, b) => b.balancePendiente - a.balancePendiente)
                 .slice(0, 10)
                 .map((s) => {
-                  const course = courses.find((c) => c.id === s.cursoId);
-                  const status = getStudentStatus(s, payments, course);
+                  const courseData = s.cursoSnapshot ?? courses.find((c) => c.id === s.cursoId);
+                  const status = getStudentStatus(s, payments, courseData);
                   return (
                     <button
                       key={s.id}
@@ -411,7 +405,7 @@ export const Payments: React.FC = () => {
                         <div className="text-[10px] font-semibold text-slate-400 flex items-center gap-2">
                           <span>{s.matricula}</span>
                           <span>•</span>
-                          <span>{course?.nombre || 'N/A'}</span>
+                          <span>{(courseData as any)?.nombre || 'N/A'}</span>
                         </div>
                       </div>
                       <div className="text-right shrink-0 flex flex-col items-end gap-1">
@@ -479,8 +473,8 @@ export const Payments: React.FC = () => {
                 </div>
                 <div className="p-5 text-center">
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Balance</span>
-                  <div className={`text-lg font-black mt-1 ${selectedStudent.balancePendiente > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                    {formatCurrency(selectedStudent.balancePendiente)}
+                  <div className={`text-lg font-black mt-1 ${currentStudent!.balancePendiente > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                    {formatCurrency(currentStudent!.balancePendiente)}
                   </div>
                 </div>
               </div>
@@ -635,7 +629,7 @@ export const Payments: React.FC = () => {
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-slate-500">Nuevo Balance</span>
                       <span className="text-lg font-black text-slate-800">
-                        {formatCurrency(Math.max(0, selectedStudent.balancePendiente - montoPagado))}
+                        {formatCurrency(Math.max(0, currentStudent!.balancePendiente - montoPagado))}
                       </span>
                     </div>
                   </div>
@@ -652,7 +646,7 @@ export const Payments: React.FC = () => {
               ) : (
                 /* Payment Form */
                 <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-5">
-                  {selectedStudent.balancePendiente === 0 ? (
+                  {currentStudent!.balancePendiente === 0 ? (
                     <div className="flex flex-col items-center justify-center py-8 text-center">
                       <CheckCircle2 className="w-10 h-10 text-emerald-300 mb-3" />
                       <span className="text-sm font-bold text-emerald-700">¡Curso pagado!</span>
@@ -662,7 +656,7 @@ export const Payments: React.FC = () => {
                     <>
                       <div className="p-3 bg-rose-50 border border-rose-100 rounded-xl flex items-center justify-between">
                         <span className="text-xs font-bold text-rose-700">Balance pendiente</span>
-                        <span className="text-base font-black text-rose-600">{formatCurrency(selectedStudent.balancePendiente)}</span>
+                        <span className="text-base font-black text-rose-600">{formatCurrency(currentStudent!.balancePendiente)}</span>
                       </div>
 
                       <Select
@@ -678,21 +672,12 @@ export const Payments: React.FC = () => {
                       <div className="flex flex-col gap-1.5">
                         <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Monto a Cobrar ($)</label>
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          {selectedCourse && selectedCourse.frecuenciaPago !== 'unico' && (
-                            <button
-                              type="button"
-                              onClick={() => { const a = moduleCost; setMontoPagado(Math.min(a, selectedStudent.balancePendiente)); setMontoRecibido(Math.min(a, selectedStudent.balancePendiente)); }}
-                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${montoPagado === Math.min(moduleCost, selectedStudent.balancePendiente) ? 'bg-brand-600 text-white shadow-sm' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
-                            >
-                              Módulo Completo ({formatCurrency(moduleCost)})
-                            </button>
-                          )}
                           <button
                             type="button"
-                            onClick={() => { setMontoPagado(selectedStudent.balancePendiente); setMontoRecibido(selectedStudent.balancePendiente); }}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${montoPagado === selectedStudent.balancePendiente ? 'bg-brand-600 text-white shadow-sm' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                            onClick={() => { setMontoPagado(currentStudent!.balancePendiente); setMontoRecibido(currentStudent!.balancePendiente); }}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${montoPagado === currentStudent!.balancePendiente ? 'bg-brand-600 text-white shadow-sm' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
                           >
-                            Saldo Pendiente ({formatCurrency(selectedStudent.balancePendiente)})
+                            Saldo Pendiente ({formatCurrency(currentStudent!.balancePendiente)})
                           </button>
                         </div>
                         <input
@@ -748,7 +733,7 @@ export const Payments: React.FC = () => {
                         </div>
                         <div className="flex items-center justify-between">
                           <span className="text-lg font-black text-slate-800">
-                            {formatCurrency(Math.max(0, selectedStudent.balancePendiente - montoPagado))}
+                            {formatCurrency(Math.max(0, currentStudent!.balancePendiente - montoPagado))}
                           </span>
                           {montoPagado > 0 && (
                             <span className="text-xs font-bold text-slate-400">

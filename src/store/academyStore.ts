@@ -222,7 +222,15 @@ export const useAcademyStore = create<AcademyState>()(
           cursoId: studentData.cursoId,
           horario: studentData.horario,
           inscripcionGratis: studentData.inscripcionGratis,
-          costoInscripcion: studentData.costoInscripcion
+          costoInscripcion: studentData.costoInscripcion,
+          cursoSnapshot: {
+            costo: course.costo,
+            frecuenciaPago: course.frecuenciaPago,
+            duracionModuloMeses: course.duracionModuloMeses || 1,
+            modulos: course.modulos,
+            nombre: course.nombre,
+            tipoPeriodoAcademico: course.tipoPeriodoAcademico,
+          }
         };
 
         // 3. Crear pago de inscripción si aplica
@@ -310,13 +318,14 @@ export const useAcademyStore = create<AcademyState>()(
         // 1. Crear Registro de Factura / Pago
         const invoiceCount = state.payments.length + 1;
         const invoiceId = `FAC-${1000 + invoiceCount}`;
+        const courseName = student.cursoSnapshot?.nombre ?? course?.nombre ?? '';
         const nuevoPago: Payment = {
           id: invoiceId,
           matricula: student.matricula,
           estudianteId: student.id,
           estudianteNombre: student.nombreCompleto,
           cursoId: student.cursoId,
-          cursoNombre: course?.nombre || '',
+          cursoNombre: courseName,
           montoPagado,
           balance: nuevoBalance,
           metodoPago,
