@@ -22,6 +22,7 @@ import {
   AlertTriangle,
   ArrowRight
 } from 'lucide-react';
+import { toast } from 'sonner';
 import html2pdf from 'html2pdf.js';
 import { formatCurrency, inputValue, getTotalCourseCost, formatDateStr } from '../utils/formatters';
 import type { Student, Payment, Cuota } from '../types';
@@ -206,6 +207,7 @@ export const Payments: React.FC = () => {
 
       setGeneratedInvoice(invoice);
       setIsInvoiceModalOpen(true);
+      toast.success('Pago registrado correctamente');
       setTimeout(() => window.print(), 500);
       setSearchTerm('');
       setStep('form');
@@ -214,7 +216,9 @@ export const Payments: React.FC = () => {
       setMontoRecibido(defaultAmount);
       setMetodoPago('efectivo');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ocurrió un error al registrar el pago.');
+      const msg = err instanceof Error ? err.message : 'Ocurrió un error al registrar el pago.';
+      setError(msg);
+      toast.error(msg);
     }
   };
 
@@ -239,8 +243,11 @@ export const Payments: React.FC = () => {
       setCancelTargetPayment(null);
       setCancelMotivo('');
       setIsInvoiceModalOpen(true);
+      toast.success('Pago anulado correctamente');
     } catch (err) {
-      setCancelError(err instanceof Error ? err.message : 'Error al anular el pago.');
+      const msg = err instanceof Error ? err.message : 'Error al anular el pago.';
+      setCancelError(msg);
+      toast.error(msg);
     }
   };
 

@@ -16,6 +16,7 @@ import {
   PenLine,
   Check
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { formatCurrency, formatDateStr } from '../utils/formatters';
 import type { CashClosure, Payment } from '../types';
 import { format } from 'date-fns';
@@ -53,6 +54,7 @@ export const CashRegister: React.FC = () => {
   const handleCloseBox = () => {
     if (confirm('¿Está seguro de realizar el Cierre de Caja del día de hoy? Una vez cerrado, no se podrán realizar nuevas inscripciones para esta fecha.')) {
       closeActiveClosure();
+      toast.success('Caja cerrada correctamente');
     }
   };
 
@@ -220,7 +222,7 @@ export const CashRegister: React.FC = () => {
                   <span className="text-xs font-semibold text-slate-400">No se pueden registrar cobros hasta reabrirla.</span>
                 </div>
               </div>
-              <Button variant="outline" size="sm" icon={<Lock className="w-4 h-4" />} onClick={() => reopenClosure()}>
+              <Button variant="outline" size="sm" icon={<Lock className="w-4 h-4" />} onClick={() => { reopenClosure(); toast.success('Caja reabierta correctamente'); }}>
                 Reabrir Caja
               </Button>
             </div>
@@ -304,6 +306,7 @@ export const CashRegister: React.FC = () => {
                           onClick={() => {
                             updateSaldoInicial(todayDateStr, saldoInput);
                             setEditingSaldo(false);
+                            toast.success('Saldo inicial actualizado');
                           }}
                           className="p-1 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors cursor-pointer"
                         >

@@ -62,11 +62,12 @@ export const Dashboard: React.FC = () => {
   // 3. Distribución de alumnos en cursos con barra de progreso
   const coursesWithStats = courses.map((course) => {
     const enrolled = students.filter((s) => s.cursoId === course.id).length;
-    const capacity = 25; // Cupo máximo teórico por curso
+    const capacity = course.capacidad || 25;
     const percent = Math.min(100, Math.round((enrolled / capacity) * 100));
     return {
       ...course,
       enrolled,
+      capacity,
       percent
     };
   });
@@ -208,7 +209,7 @@ export const Dashboard: React.FC = () => {
         <div>
           <Card
             title="Capacidad y Progreso"
-            subtitle="Cupos ocupados por curso (Capacidad: 25)"
+            subtitle="Cupos ocupados por curso"
           >
             <div className="flex flex-col gap-5">
               {coursesWithStats.map((course) => (
@@ -218,7 +219,7 @@ export const Dashboard: React.FC = () => {
                       {course.nombre}
                     </Link>
                     <span className="text-slate-400 font-extrabold text-right">
-                      {course.enrolled} / 25
+                      {course.enrolled} / {course.capacity}
                     </span>
                   </div>
                   {/* Progress Bar Container */}

@@ -7,6 +7,7 @@ import { Modal } from '../components/ui/Modal';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { Plus, Edit, Trash2, ShieldAlert, GraduationCap, ToggleLeft, ToggleRight, ArrowRight } from 'lucide-react';
+import { toast } from 'sonner';
 import { formatCurrency } from '../utils/formatters';
 import { Link } from 'react-router-dom';
 import type { Course } from '../types';
@@ -25,6 +26,7 @@ export const Courses: React.FC = () => {
   const [estado, setEstado] = useState<'activo' | 'inactivo'>('activo');
   const [frecuenciaPago, setFrecuenciaPago] = useState<'semanal' | 'quincenal' | 'mensual' | 'unico'>('quincenal');
   const [tipoPeriodoAcademico, setTipoPeriodoAcademico] = useState<'mensual' | 'trimestral' | 'cuatrimestral' | 'semestral' | 'personalizado'>('mensual');
+  const [capacidad, setCapacidad] = useState(25);
   const [duracionModuloMeses, setDuracionModuloMeses] = useState(1);
   const [error, setError] = useState('');
 
@@ -59,6 +61,7 @@ export const Courses: React.FC = () => {
     setFrecuenciaPago('quincenal');
     setTipoPeriodoAcademico('mensual');
     setDuracionModuloMeses(1);
+    setCapacidad(25);
     setError('');
     setIsModalOpen(true);
   };
@@ -74,6 +77,7 @@ export const Courses: React.FC = () => {
     setFrecuenciaPago(course.frecuenciaPago || 'quincenal');
     setTipoPeriodoAcademico(course.tipoPeriodoAcademico || 'mensual');
     setDuracionModuloMeses(course.duracionModuloMeses || 1);
+    setCapacidad(course.capacidad || 25);
     setError('');
     setIsModalOpen(true);
   };
@@ -96,6 +100,7 @@ export const Courses: React.FC = () => {
       frecuenciaPago,
       tipoPeriodoAcademico,
       duracionModuloMeses: Number(duracionModuloMeses),
+      capacidad: Number(capacidad),
     };
 
     if (editingCourse) {
@@ -103,8 +108,10 @@ export const Courses: React.FC = () => {
         ...coursePayload,
         id: editingCourse.id
       });
+      toast.success('Curso actualizado correctamente');
     } else {
       addCourse(coursePayload);
+      toast.success('Curso creado correctamente');
     }
     setIsModalOpen(false);
   };
@@ -152,7 +159,10 @@ export const Courses: React.FC = () => {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1">
                     <button
-                      onClick={() => toggleCourseState(course.id)}
+                      onClick={() => {
+                        toggleCourseState(course.id);
+                        toast.success(course.estado === 'activo' ? 'Curso desactivado' : 'Curso activado');
+                      }}
                       className="p-2 rounded-lg text-slate-400 hover:text-brand-600 hover:bg-slate-100 transition-colors cursor-pointer"
                       title={course.estado === 'activo' ? 'Desactivar curso' : 'Activar curso'}
                     >
@@ -173,6 +183,7 @@ export const Courses: React.FC = () => {
                       onClick={() => {
                         if (confirm(`¿Estás seguro de eliminar el curso "${course.nombre}"?`)) {
                           deleteCourse(course.id);
+                          toast.success('Curso eliminado correctamente');
                         }
                       }}
                       className="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
@@ -287,6 +298,18 @@ export const Courses: React.FC = () => {
               placeholder="6"
               required
             />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              label="Capacidad Máx. Estudiantes *"
+              type="number"
+              value={capacidad}
+              onChange={(e) => setCapacidad(Number(e.target.value))}
+              placeholder="25"
+              required
+            />
+            <div />
           </div>
 
           <Select

@@ -93,6 +93,8 @@ export const CourseDetail: React.FC = () => {
             <span>{course.duracionModuloMeses || 1} {((course.duracionModuloMeses || 1) === 1) ? 'mes' : 'meses'} / módulo</span>
             <span>•</span>
             <span>Pago: {course.frecuenciaPago === 'semanal' ? 'Semanal' : course.frecuenciaPago === 'quincenal' ? 'Quincenal' : course.frecuenciaPago === 'mensual' ? 'Mensual' : 'Único'}</span>
+            <span>•</span>
+            <span>Capacidad: {course.capacidad} alumnos</span>
           </div>
         </div>
         <div className="flex flex-col items-start sm:items-end text-slate-600">
@@ -107,7 +109,7 @@ export const CourseDetail: React.FC = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 no-print">
         <SummaryCard
           title="Alumnos Inscritos"
-          value={courseStudents.length}
+          value={`${courseStudents.length} / ${course.capacidad}`}
           icon={<GraduationCap className="w-5 h-5" />}
           variant="brand"
         />

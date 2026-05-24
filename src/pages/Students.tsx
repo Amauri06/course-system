@@ -6,6 +6,7 @@ import { Modal } from '../components/ui/Modal';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { Edit, Trash2, ShieldAlert, Search, Printer } from 'lucide-react';
+import { toast } from 'sonner';
 import { formatCurrency, formatDateStr } from '../utils/formatters';
 import { z } from 'zod';
 import { differenceInYears } from 'date-fns';
@@ -120,6 +121,7 @@ export const Students: React.FC = () => {
         cursoId,
         horario
       });
+      toast.success('Estudiante actualizado correctamente');
     }
     setIsModalOpen(false);
   };
@@ -196,6 +198,7 @@ export const Students: React.FC = () => {
             onClick={() => {
               if (confirm(`¿Estás seguro de eliminar al estudiante "${row.nombreCompleto}"?`)) {
                 deleteStudent(row.id);
+                toast.success('Estudiante eliminado correctamente');
               }
             }}
             className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"

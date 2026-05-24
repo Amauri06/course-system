@@ -7,6 +7,7 @@ import { Modal } from '../components/ui/Modal';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { Plus, Edit, Trash2, ShieldAlert, Phone, BookOpen, MapPin, User, Award } from 'lucide-react';
+import { toast } from 'sonner';
 import type { Teacher } from '../types';
 
 export const Teachers: React.FC = () => {
@@ -68,8 +69,10 @@ export const Teachers: React.FC = () => {
         ...teacherPayload,
         id: editingTeacher.id
       });
+      toast.success('Profesor actualizado correctamente');
     } else {
       addTeacher(teacherPayload);
+      toast.success('Profesor agregado correctamente');
     }
     setIsModalOpen(false);
   };
@@ -114,15 +117,16 @@ export const Teachers: React.FC = () => {
                   >
                     <Edit className="w-4 h-4" />
                   </button>
-                  <button
-                    onClick={() => {
-                      if (confirm(`¿Estás seguro de eliminar al profesor "${teacher.nombreCompleto}"? Se desasignará automáticamente de todos sus cursos.`)) {
-                        deleteTeacher(teacher.id);
-                      }
-                    }}
-                    className="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-                    title="Eliminar profesor"
-                  >
+                    <button
+                      onClick={() => {
+                        if (confirm(`¿Estás seguro de eliminar al profesor "${teacher.nombreCompleto}"? Se desasignará automáticamente de todos sus cursos.`)) {
+                          deleteTeacher(teacher.id);
+                          toast.success('Profesor eliminado correctamente');
+                        }
+                      }}
+                      className="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                      title="Eliminar profesor"
+                    >
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>

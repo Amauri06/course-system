@@ -10,6 +10,7 @@ export interface Course {
   frecuenciaPago: 'semanal' | 'quincenal' | 'mensual' | 'unico';
   tipoPeriodoAcademico: 'mensual' | 'trimestral' | 'cuatrimestral' | 'semestral' | 'personalizado';
   duracionModuloMeses: number; // Meses que dura cada módulo
+  capacidad: number;
 }
 
 export interface Teacher {

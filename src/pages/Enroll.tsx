@@ -15,9 +15,11 @@ import {
   Search,
   CheckCircle2,
   Wallet,
-  Coins
+  Coins,
+  AlertTriangle
 } from 'lucide-react';
 import { formatCurrency, inputValue, getIntervalDays, getTotalCourseCost, formatCedula, formatPhone } from '../utils/formatters';
+import { toast } from 'sonner';
 import { z } from 'zod';
 import { differenceInYears } from 'date-fns';
 import type { Course, Student, Payment } from '../types';
@@ -159,6 +161,8 @@ export const Enroll: React.FC = () => {
   const [error, setError] = useState('');
 
   const selectedCourse = cursoId ? courses.find((c) => c.id === cursoId) : null;
+  const enrolledCount = selectedCourse ? students.filter((s) => s.cursoId === selectedCourse.id).length : 0;
+  const isCourseFull = selectedCourse ? enrolledCount >= (selectedCourse.capacidad || 25) : false;
   const vuelta = Math.max(0, montoRecibido - montoInscripcion);
 
   useEffect(() => {
@@ -210,6 +214,11 @@ export const Enroll: React.FC = () => {
       return;
     }
 
+    if (isCourseFull) {
+      setError(`El curso "${selectedCourse?.nombre}" ha alcanzado su capacidad máxima (${enrolledCount}/${selectedCourse?.capacidad}). No es posible inscribir más estudiantes.`);
+      return;
+    }
+
     if (!inscripcionGratis && montoInscripcion > 0 && montoRecibido < montoInscripcion) {
       setError(`El monto recibido (${formatCurrency(montoRecibido)}) no puede ser menor al costo de inscripción (${formatCurrency(montoInscripcion)}).`);
       return;
@@ -252,10 +261,13 @@ export const Enroll: React.FC = () => {
       );
       setStep('form');
       setIsConfirmModalOpen(true);
+      toast.success('Estudiante inscrito correctamente');
       setTimeout(() => window.print(), 500);
       resetForm();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ocurrió un error al inscribir.');
+      const msg = err instanceof Error ? err.message : 'Ocurrió un error al inscribir.';
+      setError(msg);
+      toast.error(msg);
     }
   };
 
@@ -463,24 +475,33 @@ export const Enroll: React.FC = () => {
                   </div>
 
                   {selectedCourse && (
-                    <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
-                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Deuda Total del Curso</span>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-lg font-black text-slate-800">
-                        {formatCurrency(getTotalCourseCost(selectedCourse))}
-                      </span>
-                      {selectedCourse.frecuenciaPago === 'unico' ? (
-                        <span className="text-[10px] font-semibold text-slate-400">
-                          (pago único)
-                        </span>
-                      ) : (
-                        <span className="text-[10px] font-semibold text-slate-400">
-                          ({formatCurrency(selectedCourse.costo)}/{selectedCourse.frecuenciaPago === 'semanal' ? 'sem' : 'mes'} × {Math.round(((selectedCourse.duracionModuloMeses || 1) * selectedCourse.modulos * 30) / getIntervalDays(selectedCourse.frecuenciaPago))} períodos)
-                        </span>
+                    <>
+                      <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Deuda Total del Curso</span>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-lg font-black text-slate-800">
+                            {formatCurrency(getTotalCourseCost(selectedCourse))}
+                          </span>
+                          {selectedCourse.frecuenciaPago === 'unico' ? (
+                            <span className="text-[10px] font-semibold text-slate-400">
+                              (pago único)
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-semibold text-slate-400">
+                              ({formatCurrency(selectedCourse.costo)}/{selectedCourse.frecuenciaPago === 'semanal' ? 'sem' : 'mes'} × {Math.round(((selectedCourse.duracionModuloMeses || 1) * selectedCourse.modulos * 30) / getIntervalDays(selectedCourse.frecuenciaPago))} períodos)
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[10px] font-semibold text-amber-600 mt-1">Esta deuda se cobrará en la sección Cobros</p>
+                      </div>
+
+                      {isCourseFull && (
+                        <div className="flex items-center gap-2.5 p-3.5 bg-rose-50 border border-rose-100 rounded-xl text-rose-700 text-xs font-semibold">
+                          <AlertTriangle className="w-4.5 h-4.5 text-rose-500 shrink-0" />
+                          <span>Este curso ha alcanzado su capacidad máxima ({enrolledCount}/{selectedCourse.capacidad}). No se pueden inscribir más estudiantes.</span>
+                        </div>
                       )}
-                    </div>
-                      <p className="text-[10px] font-semibold text-amber-600 mt-1">Esta deuda se cobrará en la sección Cobros</p>
-                    </div>
+                    </>
                   )}
                 </div>
 
@@ -585,6 +606,30 @@ export const Enroll: React.FC = () => {
                   <span className="text-slate-400 font-bold uppercase text-xs">Duración</span>
                   <span className="text-slate-800 font-extrabold">{selectedCourse ? ((selectedCourse.duracionModuloMeses || 1) * (selectedCourse.modulos || 0)) + ' meses' : 'N/A'}</span>
                 </div>
+
+                {selectedCourse && (
+                  <div className="flex flex-col gap-2 border-b border-slate-100 pb-4">
+                    <span className="text-slate-400 font-bold uppercase text-xs">Cupos</span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-600">{enrolledCount} / {selectedCourse.capacidad || 25} ocupados</span>
+                      <span className={`font-black ${isCourseFull ? 'text-rose-600' : enrolledCount / (selectedCourse.capacidad || 25) >= 0.8 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                        {isCourseFull ? 'Lleno' : `${selectedCourse.capacidad || 25 - enrolledCount} libres`}
+                      </span>
+                    </div>
+                    <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden border border-slate-100">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          isCourseFull
+                            ? 'bg-rose-500'
+                            : enrolledCount / (selectedCourse.capacidad || 25) >= 0.8
+                            ? 'bg-amber-500'
+                            : 'bg-emerald-500'
+                        }`}
+                        style={{ width: `${Math.min(100, Math.round((enrolledCount / (selectedCourse.capacidad || 25)) * 100))}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex flex-col gap-2">
                   <span className="text-slate-400 font-bold uppercase text-xs">Total del Curso</span>
