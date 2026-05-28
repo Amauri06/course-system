@@ -1,7 +1,7 @@
 export interface Course {
   id: string;
   nombre: string;
-  duracion: string; // Solo para display, ej: "3 meses"
+  duracion: string; // Solo para display, ej: "6 meses"
   modulos: number;
   costo: number; // Costo por módulo
   descripcion: string;
@@ -10,6 +10,7 @@ export interface Course {
   frecuenciaPago: 'semanal' | 'quincenal' | 'mensual' | 'unico';
   tipoPeriodoAcademico: 'mensual' | 'trimestral' | 'cuatrimestral' | 'semestral' | 'personalizado';
   duracionModuloMeses: number; // Meses que dura cada módulo
+  duracionTotalMeses: number; // Duración total del curso en meses
   capacidad: number;
 }
 
@@ -44,6 +45,7 @@ export interface Student {
     modulos: number;
     nombre: string;
     tipoPeriodoAcademico?: string;
+    duracionTotalMeses?: number;
   };
 }
 

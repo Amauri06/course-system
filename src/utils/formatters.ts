@@ -54,14 +54,14 @@ interface CourseLike {
   frecuenciaPago: string;
   duracionModuloMeses?: number;
   modulos?: number;
+  duracionTotalMeses?: number;
 }
 
 export const getTotalCourseCost = (course: CourseLike | null | undefined): number => {
   if (!course) return 0;
   if (course.frecuenciaPago === 'unico') return course.costo;
   const intervalDays = getIntervalDays(course.frecuenciaPago);
-  const monthsPerModule = course.duracionModuloMeses || 1;
-  const totalMonths = monthsPerModule * (course.modulos || 0);
+  const totalMonths = course.duracionTotalMeses ?? (course.duracionModuloMeses || 1) * (course.modulos || 0);
   const totalPeriods = (totalMonths * 30) / intervalDays;
   return course.costo * totalPeriods;
 };

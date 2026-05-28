@@ -28,6 +28,8 @@ export const Courses: React.FC = () => {
   const [tipoPeriodoAcademico, setTipoPeriodoAcademico] = useState<'mensual' | 'trimestral' | 'cuatrimestral' | 'semestral' | 'personalizado'>('mensual');
   const [capacidad, setCapacidad] = useState(25);
   const [duracionModuloMeses, setDuracionModuloMeses] = useState(1);
+  const [duracionTotalMeses, setDuracionTotalMeses] = useState(6);
+  const [duracionTotalPreset, setDuracionTotalPreset] = useState('6');
   const [error, setError] = useState('');
 
   const getDefaultMonthsForType = (tipo: string) => {
@@ -40,15 +42,9 @@ export const Courses: React.FC = () => {
     }
   };
 
-  const getDefaultModulosForType = (tipo: string) => {
-    switch (tipo) {
-      case 'mensual': return 12;
-      case 'trimestral': return 4;
-      case 'cuatrimestral': return 3;
-      case 'semestral': return 2;
-      default: return 6;
-    }
-  };
+  const computedModulos = tipoPeriodoAcademico === 'personalizado'
+    ? modulos
+    : Math.round(duracionTotalMeses / duracionModuloMeses) || 1;
 
   const openCreateModal = () => {
     setEditingCourse(null);
@@ -61,12 +57,17 @@ export const Courses: React.FC = () => {
     setFrecuenciaPago('quincenal');
     setTipoPeriodoAcademico('mensual');
     setDuracionModuloMeses(1);
+    setDuracionTotalMeses(6);
+    setDuracionTotalPreset('6');
     setCapacidad(25);
     setError('');
     setIsModalOpen(true);
   };
 
   const openEditModal = (course: Course) => {
+    const durTotal = course.duracionTotalMeses ?? (course.duracionModuloMeses || 1) * course.modulos;
+    const preset = [3, 6, 9, 12].includes(durTotal) ? String(durTotal) : 'personalizado';
+
     setEditingCourse(course);
     setNombre(course.nombre);
     setCosto(course.costo);
@@ -77,6 +78,8 @@ export const Courses: React.FC = () => {
     setFrecuenciaPago(course.frecuenciaPago || 'quincenal');
     setTipoPeriodoAcademico(course.tipoPeriodoAcademico || 'mensual');
     setDuracionModuloMeses(course.duracionModuloMeses || 1);
+    setDuracionTotalMeses(durTotal);
+    setDuracionTotalPreset(preset);
     setCapacidad(course.capacidad || 25);
     setError('');
     setIsModalOpen(true);
@@ -89,10 +92,14 @@ export const Courses: React.FC = () => {
       return;
     }
 
+    const actualModulos = tipoPeriodoAcademico === 'personalizado'
+      ? Number(modulos)
+      : computedModulos;
+
     const coursePayload = {
       nombre,
-      duracion: `${duracionModuloMeses * modulos} meses`,
-      modulos: Number(modulos),
+      duracion: `${duracionTotalMeses} meses`,
+      modulos: actualModulos,
       costo: Number(costo),
       descripcion,
       profesorId: profesorId || null,
@@ -100,6 +107,7 @@ export const Courses: React.FC = () => {
       frecuenciaPago,
       tipoPeriodoAcademico,
       duracionModuloMeses: Number(duracionModuloMeses),
+      duracionTotalMeses: Number(duracionTotalMeses),
       capacidad: Number(capacidad),
     };
 
@@ -291,17 +299,6 @@ export const Courses: React.FC = () => {
               required
             />
             <Input
-              label="Cantidad de Módulos *"
-              type="number"
-              value={modulos}
-              onChange={(e) => setModulos(Number(e.target.value))}
-              placeholder="6"
-              required
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <Input
               label="Capacidad Máx. Estudiantes *"
               type="number"
               value={capacidad}
@@ -309,7 +306,6 @@ export const Courses: React.FC = () => {
               placeholder="25"
               required
             />
-            <div />
           </div>
 
           <Select
@@ -333,7 +329,6 @@ export const Courses: React.FC = () => {
                 setTipoPeriodoAcademico(tipo);
                 if (tipo !== 'personalizado') {
                   setDuracionModuloMeses(getDefaultMonthsForType(tipo));
-                  setModulos(getDefaultModulosForType(tipo));
                 }
               }}
               options={[
@@ -358,6 +353,55 @@ export const Courses: React.FC = () => {
                 <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Duración por Módulo</label>
                 <div className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm font-bold flex items-center h-[42px]">
                   {duracionModuloMeses} {duracionModuloMeses === 1 ? 'mes' : 'meses'}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Duración Total del Curso *</label>
+              <Select
+                value={duracionTotalPreset}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setDuracionTotalPreset(val);
+                  if (val !== 'personalizado') {
+                    setDuracionTotalMeses(Number(val));
+                  }
+                }}
+                options={[
+                  { value: '3', label: '3 meses' },
+                  { value: '6', label: '6 meses' },
+                  { value: '9', label: '9 meses' },
+                  { value: '12', label: '12 meses' },
+                  { value: 'personalizado', label: 'Personalizado' }
+                ]}
+              />
+              {duracionTotalPreset === 'personalizado' && (
+                <Input
+                  type="number"
+                  value={duracionTotalMeses}
+                  onChange={(e) => setDuracionTotalMeses(Number(e.target.value))}
+                  placeholder="Ej: 5"
+                  required
+                />
+              )}
+            </div>
+            {tipoPeriodoAcademico === 'personalizado' ? (
+              <Input
+                label="Cantidad de Módulos *"
+                type="number"
+                value={modulos}
+                onChange={(e) => setModulos(Number(e.target.value))}
+                placeholder="6"
+                required
+              />
+            ) : (
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Cantidad de Módulos</label>
+                <div className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm font-bold flex items-center h-[42px]">
+                  {computedModulos} módulo{computedModulos !== 1 ? 's' : ''} de {duracionModuloMeses} {duracionModuloMeses === 1 ? 'mes' : 'meses'}
                 </div>
               </div>
             )}

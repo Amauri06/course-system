@@ -488,7 +488,7 @@ export const Enroll: React.FC = () => {
                             </span>
                           ) : (
                             <span className="text-[10px] font-semibold text-slate-400">
-                              ({formatCurrency(selectedCourse.costo)}/{selectedCourse.frecuenciaPago === 'semanal' ? 'sem' : 'mes'} × {Math.round(((selectedCourse.duracionModuloMeses || 1) * selectedCourse.modulos * 30) / getIntervalDays(selectedCourse.frecuenciaPago))} períodos)
+                              ({formatCurrency(selectedCourse.costo)}/{selectedCourse.frecuenciaPago === 'semanal' ? 'sem' : 'mes'} × {Math.round(((selectedCourse.duracionTotalMeses ?? (selectedCourse.duracionModuloMeses || 1) * selectedCourse.modulos) * 30) / getIntervalDays(selectedCourse.frecuenciaPago))} períodos)
                             </span>
                           )}
                         </div>
@@ -604,7 +604,7 @@ export const Enroll: React.FC = () => {
 
                 <div className="flex items-center justify-between border-b border-slate-100 pb-4">
                   <span className="text-slate-400 font-bold uppercase text-xs">Duración</span>
-                  <span className="text-slate-800 font-extrabold">{selectedCourse ? ((selectedCourse.duracionModuloMeses || 1) * (selectedCourse.modulos || 0)) + ' meses' : 'N/A'}</span>
+                  <span className="text-slate-800 font-extrabold">{selectedCourse ? (selectedCourse.duracionTotalMeses ?? (selectedCourse.duracionModuloMeses || 1) * (selectedCourse.modulos || 0)) + ' meses' : 'N/A'}</span>
                 </div>
 
                 {selectedCourse && (
@@ -643,7 +643,7 @@ export const Enroll: React.FC = () => {
                           </>
                         ) : (
                           <>
-                            <span className="text-slate-600">{formatCurrency(selectedCourse.costo)}/{selectedCourse.frecuenciaPago === 'semanal' ? 'sem' : selectedCourse.frecuenciaPago === 'quincenal' ? 'quinc' : 'mes'} × {Math.round(((selectedCourse.duracionModuloMeses || 1) * selectedCourse.modulos * 30) / getIntervalDays(selectedCourse.frecuenciaPago))} períodos</span>
+                            <span className="text-slate-600">{formatCurrency(selectedCourse.costo)}/{selectedCourse.frecuenciaPago === 'semanal' ? 'sem' : selectedCourse.frecuenciaPago === 'quincenal' ? 'quinc' : 'mes'} × {Math.round(((selectedCourse.duracionTotalMeses ?? (selectedCourse.duracionModuloMeses || 1) * selectedCourse.modulos) * 30) / getIntervalDays(selectedCourse.frecuenciaPago))} períodos</span>
                             <span className="text-rose-600 font-black">{formatCurrency(getTotalCourseCost(selectedCourse))}</span>
                           </>
                         )}
@@ -775,7 +775,7 @@ export const Enroll: React.FC = () => {
                       </p>
                     ) : (
                       <p className="text-xs font-semibold text-rose-600 mt-0.5">
-                        {formatCurrency(selectedCourse?.costo ?? 0)}/{selectedCourse?.frecuenciaPago === 'semanal' ? 'sem' : 'mes'} × {selectedCourse ? Math.round(((selectedCourse.duracionModuloMeses || 1) * selectedCourse.modulos * 30) / getIntervalDays(selectedCourse.frecuenciaPago)) : 0} períodos
+                        {formatCurrency(selectedCourse?.costo ?? 0)}/{selectedCourse?.frecuenciaPago === 'semanal' ? 'sem' : 'mes'} × {selectedCourse ? Math.round(((selectedCourse.duracionTotalMeses ?? (selectedCourse.duracionModuloMeses || 1) * selectedCourse.modulos) * 30) / getIntervalDays(selectedCourse.frecuenciaPago)) : 0} períodos
                       </p>
                     )}
                   </div>
@@ -811,7 +811,7 @@ export const Enroll: React.FC = () => {
 
       {/* Modal de Confirmación de Inscripción */}
       {enrolledStudent && (() => {
-        const courseData: { nombre: string; costo: number; modulos?: number } | undefined = enrolledStudent.cursoSnapshot ?? courses.find((c) => c.id === enrolledStudent.cursoId);
+        const courseData = enrolledStudent.cursoSnapshot ?? courses.find((c) => c.id === enrolledStudent.cursoId);
         return (
           <Modal
             isOpen={isConfirmModalOpen}
@@ -904,9 +904,17 @@ export const Enroll: React.FC = () => {
                     <div className="flex justify-between items-center p-3 bg-gradient-to-r from-slate-800 to-slate-900 text-white rounded-xl shadow-md">
                       <div className="flex flex-col">
                         <span className="uppercase text-[10px] font-black tracking-widest text-slate-300">Mensualidades (pendiente en Cobros)</span>
-                        {courseData && (
-                          <span className="text-[9px] text-slate-400 font-semibold mt-0.5">{formatCurrency(courseData.costo)} × {courseData.modulos} módulos</span>
-                        )}
+                        {courseData && (() => {
+                          const frec = courseData.frecuenciaPago;
+                          if (frec === 'unico') {
+                            return <span className="text-[9px] text-slate-400 font-semibold mt-0.5">{formatCurrency(courseData.costo)} (pago único)</span>;
+                          }
+                          const totalMonths = 'duracionTotalMeses' in courseData && courseData.duracionTotalMeses
+                            ? courseData.duracionTotalMeses
+                            : (courseData.duracionModuloMeses || 1) * (courseData.modulos || 0);
+                          const totalPeriods = Math.round((totalMonths * 30) / getIntervalDays(frec));
+                          return <span className="text-[9px] text-slate-400 font-semibold mt-0.5">{formatCurrency(courseData.costo)} × {totalPeriods} períodos</span>;
+                        })()}
                       </div>
                       <span className={printMode === 'ticket' ? 'text-lg font-black text-white' : 'text-xl font-black text-white'}>{formatCurrency(enrolledStudent.balancePendiente)}</span>
                     </div>

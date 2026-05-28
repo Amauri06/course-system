@@ -106,8 +106,7 @@ const generarCalendarioCuotas = (
   fechaInscripcion: Date,
   frecuenciaPago: string,
   costo: number,
-  duracionModuloMeses: number,
-  modulos: number
+  totalMonths: number
 ): Cuota[] => {
   const cuotas: Cuota[] = [];
 
@@ -125,7 +124,6 @@ const generarCalendarioCuotas = (
     totalPeriods = 1;
   } else {
     const intervalDays = getIntervalDays(frecuenciaPago);
-    const totalMonths = duracionModuloMeses * modulos;
     totalPeriods = (totalMonths * 30) / intervalDays;
   }
 
@@ -365,13 +363,13 @@ export const useAcademyStore = create<AcademyState>()(
           }
         };
 
+        const totalMonths = course.duracionTotalMeses ?? (course.duracionModuloMeses || 1) * course.modulos;
+
         let totalDebt: number;
         if (course.frecuenciaPago === 'unico') {
           totalDebt = course.costo;
         } else {
           const intervalDays = getIntervalDays(course.frecuenciaPago);
-          const monthsPerModule = course.duracionModuloMeses || 1;
-          const totalMonths = monthsPerModule * course.modulos;
           const totalPeriods = (totalMonths * 30) / intervalDays;
           totalDebt = course.costo * totalPeriods;
         }
@@ -397,6 +395,7 @@ export const useAcademyStore = create<AcademyState>()(
             modulos: course.modulos,
             nombre: course.nombre,
             tipoPeriodoAcademico: course.tipoPeriodoAcademico,
+            duracionTotalMeses: totalMonths,
           }
         };
 
@@ -406,8 +405,7 @@ export const useAcademyStore = create<AcademyState>()(
           new Date(),
           course.frecuenciaPago,
           course.costo,
-          course.duracionModuloMeses || 1,
-          course.modulos
+          totalMonths
         );
 
         // 3. Crear pago de inscripción si aplica
