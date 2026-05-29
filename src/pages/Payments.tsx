@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import html2pdf from 'html2pdf.js';
-import { formatCurrency, inputValue, getTotalCourseCost, formatDateStr } from '../utils/formatters';
+import { formatCurrency, inputValue, getTotalCourseCost, formatDateStr, formatHora } from '../utils/formatters';
 import type { Student, Payment, Cuota } from '../types';
 
 // ==========================================
@@ -37,14 +37,17 @@ const getFrecuenciaLabel = (f: string) => {
   return 'Único';
 };
 
-const getDefaultPaymentAmount = (course: { costo: number } | null | undefined): number => {
-  if (!course) return 250;
+const getDefaultPaymentAmount = (course: { costo: number } | null | undefined, defaultCost: number = 250): number => {
+  if (!course) return defaultCost;
   return course.costo;
 };
 
 const formatFecha = (d: Date): string => {
-  const months = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
-  return `${d.getDate()} de ${months[d.getMonth()]} ${d.getFullYear()}`;
+  return new Intl.DateTimeFormat('es-DO', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  }).format(d);
 };
 
 const getPeriodLabel = (dateStr: string, frecuencia: string = 'quincenal'): string => {
@@ -62,7 +65,7 @@ const getPeriodLabel = (dateStr: string, frecuencia: string = 'quincenal'): stri
 const getStudentStatus = (
   student: Student,
   cuotas: Cuota[]
-): { label: string; variant: 'success' | 'danger' | 'info' } => {
+): { label: string; variant: 'success' | 'danger' | 'info' | 'warning' } => {
   if (student.balancePendiente === 0) return { label: 'Pagado', variant: 'success' };
   const studentCuotas = cuotas.filter((c) => c.estudianteId === student.id);
   if (studentCuotas.length === 0) return { label: 'Sin cuotas', variant: 'info' };
@@ -73,12 +76,16 @@ const getStudentStatus = (
     const venc = new Date(c.fechaVencimiento + 'T00:00:00');
     return venc < today;
   });
-  if (vencidas.length === 0) return { label: 'Al día', variant: 'success' };
+  if (vencidas.length === 0) {
+    const pagadas = studentCuotas.filter((c) => c.estado === 'pagada');
+    if (pagadas.length === 0) return { label: 'Pendiente', variant: 'warning' };
+    return { label: 'Al día', variant: 'success' };
+  }
   return { label: `Atrasado (${vencidas.length} cuota${vencidas.length > 1 ? 's' : ''})`, variant: 'danger' };
 };
 
 export const Payments: React.FC = () => {
-  const { students, courses, payments, registerPayment, anularPago, cuotas } = useAcademyStore();
+  const { students, courses, payments, registerPayment, anularPago, cuotas, config } = useAcademyStore();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
@@ -154,7 +161,7 @@ export const Payments: React.FC = () => {
     setSelectedStudent(student);
     setSearchTerm(student.nombreCompleto);
     setIsDropdownOpen(false);
-    const defaultAmount = getDefaultPaymentAmount(student.cursoSnapshot ?? courses.find((c) => c.id === student.cursoId));
+    const defaultAmount = getDefaultPaymentAmount(student.cursoSnapshot ?? courses.find((c) => c.id === student.cursoId), config.costoDefault);
     setMontoPagado(defaultAmount);
     setMontoRecibido(defaultAmount);
     setMetodoPago('efectivo');
@@ -211,7 +218,7 @@ export const Payments: React.FC = () => {
       setTimeout(() => window.print(), 500);
       setSearchTerm('');
       setStep('form');
-      const defaultAmount = getDefaultPaymentAmount(selectedCourse || undefined);
+      const defaultAmount = getDefaultPaymentAmount(selectedCourse || undefined, config.costoDefault);
       setMontoPagado(defaultAmount);
       setMontoRecibido(defaultAmount);
       setMetodoPago('efectivo');
@@ -460,7 +467,7 @@ export const Payments: React.FC = () => {
                     </div>
                     <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-400 font-medium">
                       <Calendar className="w-3.5 h-3.5" />
-                      <span>Inscrito: {new Date(selectedStudent.fechaInscripcion).toLocaleDateString()}</span>
+                      <span>Inscrito: {new Date(selectedStudent.fechaInscripcion).toLocaleDateString('es-DO')}</span>
                       <span className="w-1 h-1 rounded-full bg-slate-600" />
                       <Clock className="w-3.5 h-3.5" />
                       <span>{selectedStudent.horario}</span>
@@ -560,7 +567,7 @@ export const Payments: React.FC = () => {
                             </div>
                           </td>
                           <td className={`py-3 pr-4 ${isCancelled ? 'text-red-300' : 'text-slate-500'}`}>
-                            {p.fecha} <span className="text-slate-400">{p.hora}</span>
+                            {formatDateStr(p.fecha + 'T00:00:00')} <span className="text-slate-400">{formatHora(p.hora)}</span>
                             {!isCancelled && (
                               <span className="block text-[10px] font-medium text-brand-500">
                                 {getPeriodLabel(p.fecha, selectedCourse?.frecuenciaPago)}
@@ -805,7 +812,7 @@ export const Payments: React.FC = () => {
                           type="number"
                           value={inputValue(montoPagado)}
                           onChange={(e) => setMontoPagado(Number(e.target.value))}
-                          placeholder={getDefaultPaymentAmount(selectedCourse || undefined).toString()}
+                          placeholder={getDefaultPaymentAmount(selectedCourse || undefined, config.costoDefault).toString()}
                           className="w-full px-4 py-2.5 bg-white border border-slate-200 focus:ring-emerald-100 focus:border-emerald-500 rounded-xl text-slate-800 text-sm transition-all duration-200 focus:outline-hidden focus:ring-4 mt-1.5"
                         />
                       </div>
@@ -893,7 +900,7 @@ export const Payments: React.FC = () => {
                   </div>
                   <div className="flex flex-col">
                     <span className={printMode === 'ticket' ? 'text-[10px] font-black text-slate-400 uppercase tracking-wider' : 'text-xs font-bold text-slate-400 uppercase tracking-wider'}>Fecha / Hora</span>
-                    <span className="text-slate-800 mt-1 font-bold">{generatedInvoice.fecha} a las {generatedInvoice.hora}</span>
+                    <span className="text-slate-800 mt-1 font-bold">{formatDateStr(generatedInvoice.fecha + 'T00:00:00')} a las {formatHora(generatedInvoice.hora)}</span>
                   </div>
                   <div className="flex flex-col items-end text-right">
                     <span className={printMode === 'ticket' ? 'text-[10px] font-black text-slate-400 uppercase tracking-wider' : 'text-xs font-bold text-slate-400 uppercase tracking-wider'}>Método Pago</span>
@@ -1098,7 +1105,7 @@ export const Payments: React.FC = () => {
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Fecha</span>
-                <span className="text-sm font-semibold text-slate-600">{cancelTargetPayment.fecha} {cancelTargetPayment.hora}</span>
+                <span className="text-sm font-semibold text-slate-600">{formatDateStr(cancelTargetPayment.fecha + 'T00:00:00')} {formatHora(cancelTargetPayment.hora)}</span>
               </div>
             </div>
           )}

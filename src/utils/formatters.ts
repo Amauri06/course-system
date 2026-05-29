@@ -15,7 +15,7 @@ export const formatCurrency = (value: number): string => {
 export const formatDateStr = (isoString: string): string => {
   try {
     const date = new Date(isoString);
-    return new Intl.DateTimeFormat('es-ES', {
+    return new Intl.DateTimeFormat('es-DO', {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
@@ -31,7 +31,7 @@ export const formatDateStr = (isoString: string): string => {
 export const formatTimeStr = (isoString: string): string => {
   try {
     const date = new Date(isoString);
-    return new Intl.DateTimeFormat('es-ES', {
+    return new Intl.DateTimeFormat('es-DO', {
       hour: '2-digit',
       minute: '2-digit',
     }).format(date);
@@ -81,6 +81,17 @@ export const getModuleTotalCost = (course: CourseLike | null | undefined): numbe
  */
 export const inputValue = (val: number | undefined | null): string => {
   return val ? val.toString() : '';
+};
+
+export const formatHora = (hora: string): string => {
+  const [h, m] = hora.split(':').map(Number);
+  const date = new Date();
+  date.setHours(h, m, 0, 0);
+  return new Intl.DateTimeFormat('es-DO', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  }).format(date);
 };
 
 const stripNonDigits = (v: string) => v.replace(/\D/g, '');

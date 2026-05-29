@@ -11,15 +11,16 @@ import { toast } from 'sonner';
 import { formatCurrency } from '../utils/formatters';
 import { Link } from 'react-router-dom';
 import type { Course } from '../types';
+import { getCourseSchema } from '../validations/course.validation';
 
 export const Courses: React.FC = () => {
-  const { courses, teachers, students, addCourse, updateCourse, deleteCourse, toggleCourseState } = useAcademyStore();
+  const { courses, teachers, students, addCourse, updateCourse, deleteCourse, toggleCourseState, config } = useAcademyStore();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
 
   // Form states
   const [nombre, setNombre] = useState('');
-  const [costo, setCosto] = useState(150);
+  const [costo, setCosto] = useState(config.costoDefault);
   const [modulos, setModulos] = useState(6);
   const [descripcion, setDescripcion] = useState('');
   const [profesorId, setProfesorId] = useState('');
@@ -49,7 +50,7 @@ export const Courses: React.FC = () => {
   const openCreateModal = () => {
     setEditingCourse(null);
     setNombre('');
-    setCosto(150);
+    setCosto(config.costoDefault);
     setModulos(6);
     setDescripcion('');
     setProfesorId(teachers[0]?.id || '');
@@ -87,14 +88,29 @@ export const Courses: React.FC = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!nombre.trim() || !descripcion.trim()) {
-      setError('Por favor, rellene todos los campos requeridos.');
-      return;
-    }
 
     const actualModulos = tipoPeriodoAcademico === 'personalizado'
       ? Number(modulos)
       : computedModulos;
+
+    const validationResult = getCourseSchema().safeParse({
+      nombre,
+      descripcion,
+      costo: Number(costo),
+      capacidad: Number(capacidad),
+      frecuenciaPago,
+      tipoPeriodoAcademico,
+      duracionModuloMeses: Number(duracionModuloMeses),
+      duracionTotalMeses: Number(duracionTotalMeses),
+      profesorId,
+      modulos: actualModulos,
+      estado,
+    });
+
+    if (!validationResult.success) {
+      setError(validationResult.error.issues[0].message);
+      return;
+    }
 
     const coursePayload = {
       nombre,
@@ -273,7 +289,7 @@ export const Courses: React.FC = () => {
         onClose={() => setIsModalOpen(false)}
         title={editingCourse ? 'Editar Curso' : 'Crear Nuevo Curso'}
       >
-        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-5" noValidate>
           {error && (
             <div className="flex items-center gap-2 p-3.5 bg-rose-50 border border-rose-100 rounded-xl text-rose-700 text-xs font-medium">
               <ShieldAlert className="w-4.5 h-4.5 text-rose-500 shrink-0" />

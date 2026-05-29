@@ -8,44 +8,8 @@ import { Select } from '../components/ui/Select';
 import { Edit, Trash2, ShieldAlert, Search, Printer } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatCurrency, formatDateStr } from '../utils/formatters';
-import { z } from 'zod';
-import { differenceInYears } from 'date-fns';
-import type { Course, Student } from '../types';
-
-export const getStudentUpdateSchema = (courses: Course[]) => {
-  return z.object({
-    nombreCompleto: z.string().min(1, 'El nombre completo es obligatorio.'),
-    telefono: z.string().min(1, 'El teléfono es obligatorio.'),
-    fechaNacimiento: z.string().min(1, 'La fecha de nacimiento es obligatoria.'),
-    direccion: z.string().optional(),
-    cedula: z.string().optional(),
-    cursoId: z.string().min(1, 'El curso es obligatorio.'),
-    horario: z.string().min(1, 'El horario es obligatorio.')
-  }).superRefine((data, ctx) => {
-    const birthDate = new Date(data.fechaNacimiento);
-    if (isNaN(birthDate.getTime())) {
-      ctx.addIssue({ path: ['fechaNacimiento'], code: z.ZodIssueCode.custom, message: 'La fecha de nacimiento no es válida.' });
-      return;
-    }
-
-    const age = differenceInYears(new Date(), birthDate);
-    const selectedCourse = courses.find(c => c.id === data.cursoId);
-    
-    if (selectedCourse) {
-      const isIngles = selectedCourse.nombre.toLowerCase().includes('ingl');
-      const minAge = isIngles ? 10 : 13;
-      if (age < minAge) {
-        ctx.addIssue({ path: ['fechaNacimiento'], code: z.ZodIssueCode.custom, message: `El estudiante debe tener al menos ${minAge} años para el curso de ${selectedCourse.nombre} (edad actual: ${age} años).` });
-      }
-    }
-
-    if (age >= 18) {
-      if (!data.cedula || data.cedula.trim().length === 0) {
-        ctx.addIssue({ path: ['cedula'], code: z.ZodIssueCode.custom, message: 'La cédula es obligatoria para estudiantes mayores de edad (18 años o más).' });
-      }
-    }
-  });
-};
+import type { Student } from '../types';
+import { getStudentUpdateSchema } from '../validations/student.validation';
 
 
 export const Students: React.FC = () => {
@@ -283,7 +247,7 @@ export const Students: React.FC = () => {
         onClose={() => setIsModalOpen(false)}
         title="Editar Expediente de Estudiante"
       >
-        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-5" noValidate>
           {error && (
             <div className="flex items-center gap-2 p-3.5 bg-rose-50 border border-rose-100 rounded-xl text-rose-700 text-xs font-medium">
               <ShieldAlert className="w-4.5 h-4.5 text-rose-500 shrink-0" />
